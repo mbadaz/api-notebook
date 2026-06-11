@@ -224,6 +224,13 @@ pre,
   overflow-y: auto;
 }
 
+/* Sections flow at their natural/resized height; when they exceed the
+   viewport the editor column scrolls instead of squeezing them. */
+.request-editor > *,
+.pane-editor > * {
+  flex-shrink: 0;
+}
+
 .editor-title-row {
   display: flex;
   align-items: center;
@@ -336,9 +343,7 @@ pre,
 }
 
 .tab-content {
-  flex: 1;
   min-height: 140px;
-  overflow-y: auto;
   display: flex;
   flex-direction: column;
 }
@@ -533,8 +538,8 @@ input[type='radio'] {
 
 .code-area {
   width: 100%;
-  flex: 1;
-  min-height: 160px;
+  height: 220px;
+  min-height: 100px;
   resize: vertical;
   font-size: 0.88rem;
   line-height: 1.5;
@@ -542,8 +547,8 @@ input[type='radio'] {
 }
 
 .code-area-small {
-  min-height: 80px;
-  flex: 0 1 auto;
+  height: 110px;
+  min-height: 60px;
 }
 
 .body-editor,
@@ -551,7 +556,6 @@ input[type='radio'] {
 .docs-editor {
   display: flex;
   flex-direction: column;
-  flex: 1;
   padding-top: 10px;
   gap: 8px;
 }
@@ -578,7 +582,7 @@ input[type='radio'] {
 }
 
 .markdown-preview {
-  flex: 1;
+  min-height: 180px;
   overflow-y: auto;
   background: var(--bg-input);
   border: 1px solid var(--border);
@@ -612,8 +616,6 @@ input[type='radio'] {
   padding-top: 10px;
   display: flex;
   flex-direction: column;
-  max-height: 45%;
-  min-height: 120px;
 }
 
 .response-header {
@@ -644,7 +646,9 @@ input[type='radio'] {
 .status-5xx { background: #401e1e; color: var(--red); }
 
 .response-body {
-  flex: 1;
+  height: 320px;
+  min-height: 80px;
+  resize: vertical;
   overflow: auto;
   margin: 0;
   background: var(--bg-input);
@@ -658,7 +662,6 @@ input[type='radio'] {
 }
 
 .response-headers {
-  flex: 1;
   overflow-y: auto;
 }
 
@@ -767,19 +770,9 @@ input[type='radio'] {
   min-width: 0;
 }
 
-.grow-wrap {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-}
-
 .var-field > .var-input {
   width: 100%;
   display: block;
-}
-
-.grow-wrap > .var-input {
-  flex: 1;
 }
 
 /* Mirror layer: same box as the input, transparent text, only the
@@ -788,6 +781,10 @@ input[type='radio'] {
 .var-field > .var-highlight {
   position: absolute;
   inset: 0;
+  /* The mirror may inherit a fixed height from the input's class
+     (e.g. .code-area); inset must win or it stops tracking resizes. */
+  height: auto;
+  min-height: 0;
   margin: 0;
   padding: 7px 10px;
   border: 1px solid transparent;

@@ -22,22 +22,6 @@ export default function App() {
 
   const workspaceId = tree?.meta.id ?? null;
 
-  const variablesInfo = useMemo<VariablesInfo>(() => {
-    const activeEnv = tree?.environments.find(
-      (e) => e.id === tree.activeEnvironmentId
-    );
-    return {
-      envName: activeEnv?.name ?? null,
-      vars: Object.fromEntries(
-        (activeEnv?.variables ?? [])
-          // Secrets without a local value count as missing so their
-          // tokens get the error highlight.
-          .filter((v) => v.enabled && v.key && !(v.secret && v.value === ''))
-          .map((v) => [v.key, v.value])
-      ),
-    };
-  }, [tree]);
-
   const showError = useCallback((err: unknown) => {
     setToast(err instanceof Error ? err.message : String(err));
   }, []);
@@ -55,6 +39,45 @@ export default function App() {
     },
     [showError]
   );
+
+  const variablesInfo = useMemo<VariablesInfo>(() => {
+    const activeEnv = tree?.environments.find(
+      (e) => e.id === tree.activeEnvironmentId
+    );
+    const enabled = (activeEnv?.variables ?? []).filter(
+      (v) => v.enabled && v.key
+    );
+    return {
+      envName: activeEnv?.name ?? null,
+      vars: Object.fromEntries(
+        enabled
+          // Secrets without a local value count as missing so their
+          // tokens get the error highlight.
+          .filter((v) => !(v.secret && v.value === ''))
+          .map((v) => [v.key, v.value])
+      ),
+      definedNames: enabled.map((v) => v.key),
+      secretNames: enabled.filter((v) => v.secret).map((v) => v.key),
+      setVariable:
+        tree && activeEnv
+          ? async (name, value) => {
+              const variables = activeEnv.variables.some((v) => v.key === name)
+                ? activeEnv.variables.map((v) =>
+                    v.key === name ? { ...v, value, enabled: true } : v
+                  )
+                : [
+                    ...activeEnv.variables,
+                    { key: name, value, enabled: true },
+                  ];
+              await api.updateEnvironment(tree.meta.id, activeEnv.id, {
+                name: activeEnv.name,
+                variables,
+              });
+              await loadTree(tree.meta.id, true);
+            }
+          : undefined,
+    };
+  }, [tree, loadTree]);
 
   useEffect(() => {
     (async () => {

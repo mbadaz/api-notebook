@@ -801,6 +801,10 @@ input[type='radio'] {
 .var-highlight mark {
   color: transparent;
   border-radius: 3px;
+  /* The overlay ignores the mouse, but tokens accept it for the hover
+     popup; clicks are forwarded back to the input by VarField. */
+  pointer-events: auto;
+  cursor: text;
 }
 
 .var-highlight mark.var-ok {
@@ -867,4 +871,55 @@ input[type='radio'] {
   color: var(--text-muted);
   padding: 8px 10px;
   font-size: 0.88rem;
+}
+
+.var-popup {
+  position: absolute;
+  width: 300px;
+  padding: 10px 12px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  z-index: 46;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.var-popup-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  min-width: 0;
+}
+
+.var-popup-head .muted,
+.var-popup-warn {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.var-popup-warn {
+  color: var(--yellow);
+  font-size: 0.82rem;
+}
+
+.var-popup-input {
+  width: 100%;
+  font-family: 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.85rem;
+}
+
+.var-popup-msg {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.var-popup-hint {
+  margin: 0;
+  font-size: 0.75rem;
 }

@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+*.tsbuildinfo
+
+# Logs
+*.log
+npm-debug.log*
+
+# Environment files (local secrets)
+.env
+.env.*
+!.env.example
+
+# Test artifacts
+coverage/
+
+# Editor / tooling
+.idea/
+.vscode/*
+!.vscode/extensions.json
+/.claude
+
+# OS cruft
+.DS_Store
+Thumbs.db

@@ -1,6 +1,6 @@
 # API Notebook
 
-A local-first, Git-friendly API client — like Postman, but every workspace is a
+A local-first, web-based and Git-friendly API client — like Postman, but every workspace is a
 plain folder of JSON and Markdown files you can commit, diff, and share.
 
 - **HTTP & GraphQL requests** with params, headers, body modes (JSON, text,

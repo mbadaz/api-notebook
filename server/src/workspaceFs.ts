@@ -12,6 +12,7 @@ import type {
 } from './types.js';
 
 const WORKSPACE_FILE = 'workspace.json';
+const LOCAL_ENV_IGNORE = 'environments/*.local.json';
 
 export class HttpError extends Error {
   constructor(
@@ -107,6 +108,22 @@ export function createWorkspace(name: string, dirPath: string): WorkspaceMeta {
         `Open this folder with API Notebook to browse its collections, requests, and environments.\n`
     );
   }
+  const gitignore = path.join(abs, '.gitignore');
+  if (!fs.existsSync(gitignore)) {
+    fs.writeFileSync(
+      gitignore,
+      [
+        '# Secret environment values — the shared environment files only',
+        '# declare secret variable names; the values live here and stay local.',
+        LOCAL_ENV_IGNORE,
+        '',
+        '# OS cruft',
+        '.DS_Store',
+        'Thumbs.db',
+        '',
+      ].join('\n')
+    );
+  }
   return { ...meta, path: abs };
 }
 
@@ -149,11 +166,31 @@ function readCollection(ws: WorkspaceMeta, id: string): Collection {
   return { id, name: meta.name, description: meta.description ?? '', requests };
 }
 
+function localEnvFile(ws: WorkspaceMeta, id: string): string {
+  return path.join(environmentsDir(ws), `${id}.local.json`);
+}
+
 function readEnvironment(ws: WorkspaceMeta, id: string): Environment {
   const data = readJson<{ name: string; variables?: Environment['variables'] }>(
     path.join(environmentsDir(ws), `${id}.json`)
   );
-  return { id, name: data.name, variables: data.variables ?? [] };
+  // Secret values live in the gitignored <id>.local.json; the shared file
+  // only declares their names. Merge them back into one environment.
+  let localValues: Record<string, string> = {};
+  const localFile = localEnvFile(ws, id);
+  if (fs.existsSync(localFile)) {
+    try {
+      localValues = readJson<{ values?: Record<string, string> }>(localFile).values ?? {};
+    } catch {
+      // A corrupt local file just means missing secret values.
+    }
+  }
+  const variables = (data.variables ?? []).map((v) =>
+    v.secret
+      ? { ...v, value: Object.hasOwn(localValues, v.key) ? localValues[v.key] : '' }
+      : v
+  );
+  return { id, name: data.name, variables };
 }
 
 export function readTree(
@@ -165,9 +202,9 @@ export function readTree(
       fs.existsSync(path.join(collectionsDir(ws), d, 'collection.json'))
     )
     .map((d) => readCollection(ws, d));
-  const environments = listJsonFiles(environmentsDir(ws)).map((f) =>
-    readEnvironment(ws, f.replace(/\.json$/, ''))
-  );
+  const environments = listJsonFiles(environmentsDir(ws))
+    .filter((f) => !f.endsWith('.local.json'))
+    .map((f) => readEnvironment(ws, f.replace(/\.json$/, '')));
   const activeIsValid = environments.some((e) => e.id === activeEnvironmentId);
   return {
     meta: ws,
@@ -292,6 +329,25 @@ export function getEnvironment(
   return readEnvironment(ws, id);
 }
 
+/**
+ * Make sure the workspace's .gitignore excludes <env>.local.json files,
+ * so secret values can never be committed by accident. Appends the rule
+ * to workspaces created before this feature existed.
+ */
+function ensureLocalEnvIgnored(ws: WorkspaceMeta): void {
+  const file = path.join(ws.path, '.gitignore');
+  const existing = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
+  const lines = existing.split('\n').map((l) => l.trim());
+  if (lines.includes(LOCAL_ENV_IGNORE) || lines.includes(`/${LOCAL_ENV_IGNORE}`)) {
+    return;
+  }
+  const block = `# Secret environment values stay local\n${LOCAL_ENV_IGNORE}\n`;
+  const content = existing
+    ? existing.replace(/\n*$/, '\n\n') + block
+    : block;
+  fs.writeFileSync(file, content);
+}
+
 export function updateEnvironment(
   ws: WorkspaceMeta,
   id: string,
@@ -301,9 +357,24 @@ export function updateEnvironment(
   if (!fs.existsSync(file)) {
     throw new HttpError(404, `Environment "${id}" not found`);
   }
-  writeJson(file, { name: changes.name, variables: changes.variables });
+  // Shared file keeps secret variable names but never their values.
+  const shared = changes.variables.map((v) =>
+    v.secret ? { ...v, value: '' } : v
+  );
+  writeJson(file, { name: changes.name, variables: shared });
+
+  const secrets = changes.variables.filter((v) => v.secret && v.key);
+  if (secrets.length > 0) {
+    writeJson(localEnvFile(ws, id), {
+      values: Object.fromEntries(secrets.map((v) => [v.key, v.value])),
+    });
+    ensureLocalEnvIgnored(ws);
+  } else {
+    fs.rmSync(localEnvFile(ws, id), { force: true });
+  }
 }
 
 export function deleteEnvironment(ws: WorkspaceMeta, id: string): void {
   fs.rmSync(path.join(environmentsDir(ws), `${id}.json`), { force: true });
+  fs.rmSync(localEnvFile(ws, id), { force: true });
 }

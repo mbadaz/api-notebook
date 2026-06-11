@@ -20,7 +20,11 @@ export function interpolate(
 function envToVars(env: Environment | undefined): Record<string, string> {
   const vars: Record<string, string> = {};
   for (const v of env?.variables ?? []) {
-    if (v.enabled && v.key) vars[v.key] = v.value;
+    // A secret without a local value is treated as undefined so the token
+    // stays literal (and visibly wrong) instead of resolving to "".
+    if (v.enabled && v.key && !(v.secret && v.value === '')) {
+      vars[v.key] = v.value;
+    }
   }
   return vars;
 }

@@ -62,7 +62,10 @@ export function EnvironmentEditor({
       {error && <p className="error-text">{error}</p>}
       <p className="muted">
         Variables can be referenced anywhere in a request as{' '}
-        <code>{'{{variableName}}'}</code>.
+        <code>{'{{variableName}}'}</code>. Variables marked 🔒 are secret:
+        only their <em>name</em> is saved to the shared environment file —
+        the value goes to a gitignored <code>.local.json</code> file, so each
+        teammate fills in their own.
       </p>
       <KeyValueEditor
         items={variables}
@@ -70,6 +73,7 @@ export function EnvironmentEditor({
         keyPlaceholder="variable"
         addLabel="Variable"
         variableSupport={false}
+        secretSupport
       />
     </div>
   );

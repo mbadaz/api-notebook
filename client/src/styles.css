@@ -486,6 +486,25 @@ input[type='radio'] {
   flex: 3;
 }
 
+.lock-btn {
+  filter: grayscale(1);
+  opacity: 0.45;
+}
+
+.lock-btn.locked {
+  filter: none;
+  opacity: 1;
+}
+
+.kv-value.kv-secret-missing {
+  border-color: var(--yellow);
+}
+
+.kv-value.kv-secret-missing::placeholder {
+  color: var(--yellow);
+  opacity: 0.8;
+}
+
 .kv-static {
   display: flex;
   gap: 12px;

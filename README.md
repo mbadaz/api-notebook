@@ -9,6 +9,10 @@ plain folder of JSON and Markdown files you can commit, diff, and share.
 - **Environments** (workspace-level) with `{{variable}}` interpolation in
   URLs, params, headers, auth fields, and bodies. The active environment is
   stored outside the workspace so it never pollutes your repo.
+- **Secret variables**: mark a variable 🔒 and its value is written to a
+  gitignored `<env>.local.json` instead of the shared environment file —
+  the shared file only declares the name, so teammates see exactly which
+  secrets they need to fill in locally.
 - **Markdown docs** on every request (stored as a sibling `.md` file, so it
   renders on GitHub) and on every collection.
 - **Workspaces** are folders you choose anywhere on disk via the native
@@ -41,7 +45,8 @@ npm start          # http://localhost:3001
 my-workspace/
 ├── workspace.json              # { id, name }
 ├── environments/
-│   └── dev.json                # { name, variables: [{ key, value, enabled }] }
+│   ├── dev.json                # shared variables + secret variable names
+│   └── dev.local.json          # secret values — gitignored, per machine
 └── collections/
     └── users-api/
         ├── collection.json     # { name, description }
@@ -64,9 +69,12 @@ gh repo create my-workspace --private --source . --push
 
 Teammates clone the repo, then in API Notebook choose
 **Open existing folder…** and point it at the clone. Pull to get changes,
-commit and push to share yours. Secrets tip: keep tokens in environment
-variable values and consider gitignoring `environments/*.json` if they hold
-real credentials.
+commit and push to share yours. Keep credentials in variables marked 🔒
+secret: their values live in gitignored `<env>.local.json` files (every
+workspace `.gitignore` includes the rule automatically), so the repo shares
+the variable names while each teammate supplies their own values. A cloned
+workspace shows unfilled secrets with a "missing" warning, and their
+`{{tokens}}` highlight red until a local value is set.
 
 ## Keyboard shortcuts
 

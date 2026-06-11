@@ -23,6 +23,11 @@ export interface KeyValue {
   key: string;
   value: string;
   enabled: boolean;
+  /**
+   * Environment variables only: secret values are stored in the
+   * gitignored <env>.local.json instead of the shared environment file.
+   */
+  secret?: boolean;
 }
 
 export type AuthType = 'none' | 'bearer' | 'basic' | 'apiKey';

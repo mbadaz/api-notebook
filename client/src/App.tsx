@@ -30,7 +30,9 @@ export default function App() {
       envName: activeEnv?.name ?? null,
       vars: Object.fromEntries(
         (activeEnv?.variables ?? [])
-          .filter((v) => v.enabled && v.key)
+          // Secrets without a local value count as missing so their
+          // tokens get the error highlight.
+          .filter((v) => v.enabled && v.key && !(v.secret && v.value === ''))
           .map((v) => [v.key, v.value])
       ),
     };

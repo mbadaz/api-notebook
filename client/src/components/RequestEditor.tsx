@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { api } from '../api';
+import { beautifyGraphql, beautifyJson } from '../beautify';
 import {
   HTTP_METHODS,
   type ApiRequest,
@@ -45,12 +46,22 @@ export function RequestEditor({
   const [execError, setExecError] = useState<string | null>(null);
   const [executing, setExecuting] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [formatError, setFormatError] = useState<string | null>(null);
 
   const dirty = JSON.stringify(draft) !== JSON.stringify(saved);
   const isGraphql = draft.type === 'graphql';
 
   const patch = (changes: Partial<ApiRequest>) =>
     setDraft((d) => ({ ...d, ...changes }));
+
+  function beautify(fn: () => Partial<ApiRequest>) {
+    setFormatError(null);
+    try {
+      patch(fn());
+    } catch (err) {
+      setFormatError(err instanceof Error ? err.message : String(err));
+    }
+  }
 
   async function save() {
     setSaveError(null);
@@ -186,31 +197,62 @@ export function RequestEditor({
 
         {tab === 'body' && isGraphql && (
           <div className="graphql-editor">
-            <label className="field grow">
-              <span>Query</span>
-              <VarField
-                multiline
-                className="code-area"
-                wrapClassName="grow-wrap"
-                value={draft.graphql.query}
-                placeholder={'query {\n  viewer {\n    id\n  }\n}'}
-                onChange={(query) =>
-                  patch({ graphql: { ...draft.graphql, query } })
+            <div className="editor-toolbar">
+              <span className="panel-title">Query</span>
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={() =>
+                  beautify(() => ({
+                    graphql: {
+                      ...draft.graphql,
+                      query: beautifyGraphql(draft.graphql.query),
+                    },
+                  }))
                 }
-              />
-            </label>
-            <label className="field">
-              <span>Variables (JSON)</span>
-              <VarField
-                multiline
-                className="code-area code-area-small"
-                value={draft.graphql.variables}
-                placeholder={'{ "id": 1 }'}
-                onChange={(variables) =>
-                  patch({ graphql: { ...draft.graphql, variables } })
+              >
+                Beautify
+              </button>
+            </div>
+            <VarField
+              multiline
+              syntax="graphql"
+              className="code-area"
+              wrapClassName="grow-wrap"
+              value={draft.graphql.query}
+              placeholder={'query {\n  viewer {\n    id\n  }\n}'}
+              onChange={(query) => {
+                setFormatError(null);
+                patch({ graphql: { ...draft.graphql, query } });
+              }}
+            />
+            <div className="editor-toolbar">
+              <span className="panel-title">Variables (JSON)</span>
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={() =>
+                  beautify(() => ({
+                    graphql: {
+                      ...draft.graphql,
+                      variables: beautifyJson(draft.graphql.variables),
+                    },
+                  }))
                 }
-              />
-            </label>
+              >
+                Beautify
+              </button>
+            </div>
+            <VarField
+              multiline
+              syntax="json"
+              className="code-area code-area-small"
+              value={draft.graphql.variables}
+              placeholder={'{ "id": 1 }'}
+              onChange={(variables) => {
+                setFormatError(null);
+                patch({ graphql: { ...draft.graphql, variables } });
+              }}
+            />
+            {formatError && <p className="error-text">{formatError}</p>}
           </div>
         )}
 
@@ -230,19 +272,38 @@ export function RequestEditor({
                   {m.label}
                 </label>
               ))}
+              <div className="spacer" />
+              {draft.body.mode === 'json' && (
+                <button
+                  className="btn btn-ghost btn-sm"
+                  onClick={() =>
+                    beautify(() => ({
+                      body: {
+                        ...draft.body,
+                        content: beautifyJson(draft.body.content),
+                      },
+                    }))
+                  }
+                >
+                  Beautify
+                </button>
+              )}
             </div>
+            {formatError && <p className="error-text">{formatError}</p>}
             {(draft.body.mode === 'json' || draft.body.mode === 'text') && (
               <VarField
                 multiline
+                syntax={draft.body.mode === 'json' ? 'json' : undefined}
                 className="code-area"
                 wrapClassName="grow-wrap"
                 value={draft.body.content}
                 placeholder={
                   draft.body.mode === 'json' ? '{ "key": "value" }' : 'Raw body'
                 }
-                onChange={(content) =>
-                  patch({ body: { ...draft.body, content } })
-                }
+                onChange={(content) => {
+                  setFormatError(null);
+                  patch({ body: { ...draft.body, content } });
+                }}
               />
             )}
             {draft.body.mode === 'form' && (

@@ -1,4 +1,6 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import { formatXml } from '../beautify';
+import { contentTypeLanguage, highlightCode } from '../highlight';
 import type { ExecutionResult } from '../types';
 
 interface Props {
@@ -6,6 +8,9 @@ interface Props {
   error: string | null;
   executing: boolean;
 }
+
+// Beyond this, formatting/highlighting large bodies would jank the UI.
+const MAX_PRETTY_CHARS = 300_000;
 
 function statusClass(status: number): string {
   if (status < 300) return 'status-2xx';
@@ -20,20 +25,41 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
-function prettyBody(result: ExecutionResult): string {
-  const contentType = result.headers['content-type'] ?? '';
-  if (contentType.includes('json')) {
-    try {
-      return JSON.stringify(JSON.parse(result.body), null, 2);
-    } catch {
-      return result.body;
-    }
-  }
-  return result.body;
-}
-
 export function ResponsePanel({ response, error, executing }: Props) {
   const [tab, setTab] = useState<'body' | 'headers'>('body');
+  const [view, setView] = useState<'pretty' | 'raw'>('pretty');
+
+  const contentType = response?.headers['content-type'] ?? '';
+  const language = contentTypeLanguage(contentType);
+  const isHtml = contentType.toLowerCase().includes('html');
+  const tooLarge = (response?.body.length ?? 0) > MAX_PRETTY_CHARS;
+
+  const prettyText = useMemo(() => {
+    if (!response || tooLarge) return response?.body ?? '';
+    if (language === 'json') {
+      try {
+        return JSON.stringify(JSON.parse(response.body), null, 2);
+      } catch {
+        return response.body;
+      }
+    }
+    if (language === 'xml') return formatXml(response.body);
+    return response.body;
+  }, [response, language, tooLarge]);
+
+  const highlighted = useMemo(() => {
+    if (!response || !language || tooLarge) return null;
+    return highlightCode(prettyText, language);
+  }, [response, language, prettyText, tooLarge]);
+
+  function openPreview() {
+    if (!response) return;
+    const url = URL.createObjectURL(
+      new Blob([response.body], { type: 'text/html' })
+    );
+    window.open(url, '_blank');
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  }
 
   return (
     <div className="response-panel">
@@ -48,6 +74,29 @@ export function ResponsePanel({ response, error, executing }: Props) {
             <span className="muted">{response.timeMs} ms</span>
             <span className="muted">{formatSize(response.sizeBytes)}</span>
             <div className="spacer" />
+            {tab === 'body' && (
+              <>
+                {isHtml && (
+                  <button className="btn btn-ghost btn-sm" onClick={openPreview}>
+                    Preview ↗
+                  </button>
+                )}
+                <div className="tab-group">
+                  <button
+                    className={view === 'pretty' ? 'tab active' : 'tab'}
+                    onClick={() => setView('pretty')}
+                  >
+                    Pretty
+                  </button>
+                  <button
+                    className={view === 'raw' ? 'tab active' : 'tab'}
+                    onClick={() => setView('raw')}
+                  >
+                    Raw
+                  </button>
+                </div>
+              </>
+            )}
             <div className="tab-group">
               <button
                 className={tab === 'body' ? 'tab active' : 'tab'}
@@ -67,7 +116,22 @@ export function ResponsePanel({ response, error, executing }: Props) {
       </div>
       {error && !executing && <div className="response-error">{error}</div>}
       {response && !executing && tab === 'body' && (
-        <pre className="response-body">{prettyBody(response)}</pre>
+        <>
+          {view === 'pretty' && highlighted !== null ? (
+            <pre className="response-body">
+              <code dangerouslySetInnerHTML={{ __html: highlighted }} />
+            </pre>
+          ) : (
+            <pre className="response-body">
+              {view === 'pretty' ? prettyText : response.body}
+            </pre>
+          )}
+          {tooLarge && (
+            <p className="muted response-note">
+              Response is large — formatting and highlighting are disabled.
+            </p>
+          )}
+        </>
       )}
       {response && !executing && tab === 'headers' && (
         <div className="response-headers">

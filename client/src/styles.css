@@ -435,6 +435,11 @@ input[type='radio'] {
   border-color: var(--border);
 }
 
+.btn-sm {
+  padding: 3px 10px;
+  font-size: 0.85rem;
+}
+
 .btn-danger-ghost {
   background: none;
   border-color: transparent;
@@ -565,7 +570,8 @@ input[type='radio'] {
   cursor: pointer;
 }
 
-.docs-toolbar {
+.docs-toolbar,
+.editor-toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -666,6 +672,15 @@ input[type='radio'] {
 
 .response-placeholder {
   padding: 8px 0;
+}
+
+.response-note {
+  margin: 4px 0 0;
+  font-size: 0.8rem;
+}
+
+.response-body code {
+  font: inherit;
 }
 
 /* ---------- modal ---------- */
@@ -813,6 +828,34 @@ input[type='radio'] {
 
 .var-highlight mark.var-missing {
   background: rgba(224, 92, 92, 0.42);
+}
+
+/* Syntax mode: the mirror carries the visible (colored) text and the
+   input's own text goes transparent — the caret stays native. */
+.var-input.var-input-syntax {
+  color: transparent;
+  caret-color: var(--text);
+}
+
+.var-input.var-input-syntax::placeholder {
+  color: var(--text-muted);
+}
+
+.var-input.var-input-syntax::selection {
+  background: rgba(78, 163, 240, 0.35);
+  color: transparent;
+}
+
+.var-field > .var-highlight.var-highlight-syntax {
+  color: var(--text);
+}
+
+.var-highlight.var-highlight-syntax mark.var-ok {
+  color: var(--blue);
+}
+
+.var-highlight.var-highlight-syntax mark.var-missing {
+  color: #ff9d9d;
 }
 
 .var-menu {

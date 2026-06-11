@@ -8,6 +8,7 @@ import {
   type MouseEvent,
   type ReactNode,
 } from 'react';
+import { highlightSegment, type SyntaxLanguage } from '../highlight';
 import { VariablesContext } from '../variables';
 
 interface Props {
@@ -18,6 +19,11 @@ interface Props {
   className?: string;
   wrapClassName?: string;
   placeholder?: string;
+  /**
+   * Syntax-highlight the content: the mirror renders the colored text and
+   * the input's own text becomes transparent (caret stays visible).
+   */
+  syntax?: SyntaxLanguage;
   onKeyDown?: (e: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => void;
 }
 
@@ -145,6 +151,7 @@ export function VarField({
   className = '',
   wrapClassName = '',
   placeholder,
+  syntax,
   onKeyDown,
 }: Props) {
   const { vars, envName } = useContext(VariablesContext);
@@ -305,11 +312,20 @@ export function VarField({
   function renderHighlights(): ReactNode[] {
     const nodes: ReactNode[] = [];
     let offset = 0;
+    let continuation: unknown;
     value.split(TOKEN_SPLIT).forEach((part, i) => {
       const end = offset + part.length;
       const m = TOKEN_EXACT.exec(part);
       if (!m) {
-        nodes.push(<span key={i}>{part}</span>);
+        if (syntax && part) {
+          const seg = highlightSegment(part, syntax, continuation);
+          continuation = seg.continuation;
+          nodes.push(
+            <span key={i} dangerouslySetInnerHTML={{ __html: seg.html }} />
+          );
+        } else {
+          nodes.push(<span key={i}>{part}</span>);
+        }
       } else {
         const name = m[1];
         nodes.push(
@@ -332,7 +348,7 @@ export function VarField({
   const shared = {
     value,
     placeholder,
-    className: `var-input ${className}`,
+    className: `var-input ${syntax ? 'var-input-syntax ' : ''}${className}`,
     onChange: handleChange,
     onKeyDown: handleKeyDown,
     onSelect: (e: { currentTarget: HTMLInputElement | HTMLTextAreaElement }) =>
@@ -364,7 +380,7 @@ export function VarField({
         aria-hidden
         className={`var-highlight ${
           multiline ? 'var-highlight-multi' : 'var-highlight-single'
-        } ${className}`}
+        } ${syntax ? 'var-highlight-syntax ' : ''}${className}`}
       >
         {renderHighlights()}
         {multiline && '\n'}

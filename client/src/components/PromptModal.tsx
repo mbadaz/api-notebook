@@ -6,7 +6,7 @@ export interface PromptField {
   label: string;
   placeholder?: string;
   initial?: string;
-  type?: 'text' | 'select' | 'folder';
+  type?: 'text' | 'select' | 'folder' | 'textarea';
   options?: { value: string; label: string }[];
 }
 
@@ -85,6 +85,17 @@ export function PromptModal({ config, onClose }: Props) {
                   </option>
                 ))}
               </select>
+            ) : field.type === 'textarea' ? (
+              <textarea
+                className="code-area code-area-small"
+                autoFocus={field === config.fields[0]}
+                value={values[field.name]}
+                placeholder={field.placeholder}
+                spellCheck={false}
+                onChange={(e) =>
+                  setValues({ ...values, [field.name]: e.target.value })
+                }
+              />
             ) : field.type === 'folder' ? (
               <div className="folder-field">
                 <input

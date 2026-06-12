@@ -31,11 +31,12 @@ export function ResponsePanel({ response, error, executing }: Props) {
 
   const contentType = response?.headers['content-type'] ?? '';
   const language = contentTypeLanguage(contentType);
-  const isHtml = contentType.toLowerCase().includes('html');
+  const isBinary = response?.bodyEncoding === 'base64';
+  const isHtml = !isBinary && contentType.toLowerCase().includes('html');
   const tooLarge = (response?.body.length ?? 0) > MAX_PRETTY_CHARS;
 
   const prettyText = useMemo(() => {
-    if (!response || tooLarge) return response?.body ?? '';
+    if (!response || tooLarge || isBinary) return response?.body ?? '';
     if (language === 'json') {
       try {
         return JSON.stringify(JSON.parse(response.body), null, 2);
@@ -45,12 +46,47 @@ export function ResponsePanel({ response, error, executing }: Props) {
     }
     if (language === 'xml') return formatXml(response.body);
     return response.body;
-  }, [response, language, tooLarge]);
+  }, [response, language, tooLarge, isBinary]);
 
   const highlighted = useMemo(() => {
-    if (!response || !language || tooLarge) return null;
+    if (!response || !language || tooLarge || isBinary) return null;
     return highlightCode(prettyText, language);
-  }, [response, language, prettyText, tooLarge]);
+  }, [response, language, prettyText, tooLarge, isBinary]);
+
+  function responseBlob(): Blob {
+    if (!response) return new Blob([]);
+    const type = contentType || 'application/octet-stream';
+    if (isBinary) {
+      const bin = atob(response.body);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      return new Blob([bytes], { type });
+    }
+    return new Blob([response.body], { type: type || 'text/plain' });
+  }
+
+  function suggestedFilename(): string {
+    try {
+      const base = new URL(response?.resolvedUrl ?? '').pathname
+        .split('/')
+        .filter(Boolean)
+        .pop();
+      if (base && base.includes('.')) return base;
+      if (base) return base;
+    } catch {
+      // fall through
+    }
+    return 'response';
+  }
+
+  function download() {
+    const url = URL.createObjectURL(responseBlob());
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = suggestedFilename();
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  }
 
   function openPreview() {
     if (!response) return;
@@ -76,25 +112,30 @@ export function ResponsePanel({ response, error, executing }: Props) {
             <div className="spacer" />
             {tab === 'body' && (
               <>
+                <button className="btn btn-ghost btn-sm" onClick={download}>
+                  Download
+                </button>
                 {isHtml && (
                   <button className="btn btn-ghost btn-sm" onClick={openPreview}>
                     Preview ↗
                   </button>
                 )}
-                <div className="tab-group">
-                  <button
-                    className={view === 'pretty' ? 'tab active' : 'tab'}
-                    onClick={() => setView('pretty')}
-                  >
-                    Pretty
-                  </button>
-                  <button
-                    className={view === 'raw' ? 'tab active' : 'tab'}
-                    onClick={() => setView('raw')}
-                  >
-                    Raw
-                  </button>
-                </div>
+                {!isBinary && (
+                  <div className="tab-group">
+                    <button
+                      className={view === 'pretty' ? 'tab active' : 'tab'}
+                      onClick={() => setView('pretty')}
+                    >
+                      Pretty
+                    </button>
+                    <button
+                      className={view === 'raw' ? 'tab active' : 'tab'}
+                      onClick={() => setView('raw')}
+                    >
+                      Raw
+                    </button>
+                  </div>
+                )}
               </>
             )}
             <div className="tab-group">
@@ -115,7 +156,16 @@ export function ResponsePanel({ response, error, executing }: Props) {
         )}
       </div>
       {error && !executing && <div className="response-error">{error}</div>}
-      {response && !executing && tab === 'body' && (
+      {response && !executing && tab === 'body' && isBinary && (
+        <div className="binary-response">
+          <p>
+            Binary response — <code>{contentType || 'unknown type'}</code>,{' '}
+            {formatSize(response.sizeBytes)}. Use <strong>Download</strong> to
+            save it to a file.
+          </p>
+        </div>
+      )}
+      {response && !executing && tab === 'body' && !isBinary && (
         <>
           {view === 'pretty' && highlighted !== null ? (
             <pre className="response-body">

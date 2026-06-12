@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useContext, useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { api } from '../api';
 import { beautifyGraphql, beautifyJson } from '../beautify';
+import { requestToCurl } from '../curl';
 import {
   HTTP_METHODS,
   type ApiRequest,
@@ -9,7 +10,9 @@ import {
   type ExecutionResult,
   type HttpMethod,
 } from '../types';
+import { VariablesContext } from '../variables';
 import { AuthEditor } from './AuthEditor';
+import { FormDataEditor } from './FormDataEditor';
 import { KeyValueEditor } from './KeyValueEditor';
 import { ResponsePanel } from './ResponsePanel';
 import { VarField } from './VarField';
@@ -20,6 +23,7 @@ interface Props {
   request: ApiRequest;
   onSaved: (request: ApiRequest) => void;
   onDelete: () => void;
+  onDirtyChange: (dirty: boolean) => void;
 }
 
 type Tab = 'params' | 'headers' | 'auth' | 'body' | 'docs';
@@ -28,7 +32,9 @@ const BODY_MODES: { value: BodyMode; label: string }[] = [
   { value: 'none', label: 'None' },
   { value: 'json', label: 'JSON' },
   { value: 'text', label: 'Text' },
-  { value: 'form', label: 'Form (urlencoded)' },
+  { value: 'form', label: 'Form URL-encoded' },
+  { value: 'formData', label: 'Form Data' },
+  { value: 'binary', label: 'Binary' },
 ];
 
 export function RequestEditor({
@@ -37,6 +43,7 @@ export function RequestEditor({
   request,
   onSaved,
   onDelete,
+  onDirtyChange,
 }: Props) {
   const [saved, setSaved] = useState(request);
   const [draft, setDraft] = useState(request);
@@ -47,9 +54,19 @@ export function RequestEditor({
   const [executing, setExecuting] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [formatError, setFormatError] = useState<string | null>(null);
+  const [curlCopied, setCurlCopied] = useState(false);
+  const [browsingBinary, setBrowsingBinary] = useState(false);
+  const { vars } = useContext(VariablesContext);
 
   const dirty = JSON.stringify(draft) !== JSON.stringify(saved);
   const isGraphql = draft.type === 'graphql';
+
+  useEffect(() => {
+    onDirtyChange(dirty);
+  }, [dirty, onDirtyChange]);
+
+  // Unmounting (navigating away after a confirm) clears the dirty flag.
+  useEffect(() => () => onDirtyChange(false), [onDirtyChange]);
 
   const patch = (changes: Partial<ApiRequest>) =>
     setDraft((d) => ({ ...d, ...changes }));
@@ -113,8 +130,21 @@ export function RequestEditor({
           value={draft.name}
           onChange={(e) => patch({ name: e.target.value })}
         />
-        {dirty && <span className="dirty-dot" title="Unsaved changes" />}
-        <button className="btn" onClick={save}>
+        <button
+          className="btn btn-ghost btn-sm"
+          onClick={async () => {
+            await navigator.clipboard.writeText(requestToCurl(draft, vars));
+            setCurlCopied(true);
+            setTimeout(() => setCurlCopied(false), 1500);
+          }}
+        >
+          {curlCopied ? 'Copied!' : 'Copy as cURL'}
+        </button>
+        <button
+          className={dirty ? 'btn btn-primary' : 'btn'}
+          title={dirty ? 'You have unsaved changes' : 'No unsaved changes'}
+          onClick={save}
+        >
           Save
         </button>
         <button className="btn btn-danger-ghost" onClick={onDelete}>
@@ -312,6 +342,54 @@ export function RequestEditor({
                 onChange={(form) => patch({ body: { ...draft.body, form } })}
                 addLabel="Field"
               />
+            )}
+            {draft.body.mode === 'formData' && (
+              <FormDataEditor
+                items={draft.body.formData}
+                onChange={(formData) =>
+                  patch({ body: { ...draft.body, formData } })
+                }
+              />
+            )}
+            {draft.body.mode === 'binary' && (
+              <div className="binary-editor">
+                <div className="file-cell">
+                  <VarField
+                    className="kv-value"
+                    wrapClassName="kv-value"
+                    value={draft.body.binaryPath}
+                    placeholder="/path/to/file"
+                    onChange={(binaryPath) =>
+                      patch({ body: { ...draft.body, binaryPath } })
+                    }
+                  />
+                  <button
+                    className="btn btn-sm"
+                    disabled={browsingBinary}
+                    onClick={async () => {
+                      setBrowsingBinary(true);
+                      try {
+                        const { path } = await api.pickFile(
+                          'Choose the file to send as the request body'
+                        );
+                        if (path) {
+                          patch({ body: { ...draft.body, binaryPath: path } });
+                        }
+                      } finally {
+                        setBrowsingBinary(false);
+                      }
+                    }}
+                  >
+                    {browsingBinary ? '…' : 'Browse…'}
+                  </button>
+                </div>
+                <p className="muted">
+                  The file is read at send time. Content-Type is guessed from
+                  the extension unless you set the header yourself. Note: file
+                  paths are machine-specific, so teammates may need to adjust
+                  them.
+                </p>
+              </div>
             )}
             {draft.body.mode === 'none' && (
               <p className="muted">This request has no body.</p>

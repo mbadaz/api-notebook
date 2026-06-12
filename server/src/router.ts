@@ -1,7 +1,7 @@
 import { Router, type Request, type Response } from 'express';
 import * as appData from './appData.js';
 import { executeRequest } from './execute.js';
-import { pickFolder } from './pickFolder.js';
+import { pickFile, pickFolder } from './pickFolder.js';
 import * as wsfs from './workspaceFs.js';
 import { HttpError } from './workspaceFs.js';
 import type { ApiRequest, WorkspaceMeta } from './types.js';
@@ -35,6 +35,17 @@ router.post(
         ? req.body.title
         : 'Choose a folder';
     res.json({ path: await pickFolder(title) });
+  })
+);
+
+router.post(
+  '/pick-file',
+  wrap(async (req, res) => {
+    const title =
+      typeof req.body.title === 'string' && req.body.title.trim()
+        ? req.body.title
+        : 'Choose a file';
+    res.json({ path: await pickFile(title) });
   })
 );
 

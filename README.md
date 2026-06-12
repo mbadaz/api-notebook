@@ -4,7 +4,17 @@ A local-first, web-based and Git-friendly API client — like Postman, but every
 plain folder of JSON and Markdown files you can commit, diff, and share.
 
 - **HTTP & GraphQL requests** with params, headers, body modes (JSON, text,
-  form-urlencoded) and GraphQL query/variables editors.
+  form-urlencoded, multipart form-data with file fields, binary file) and
+  GraphQL query/variables editors. File bodies are referenced by path and
+  read at send time; Content-Type is guessed from the extension.
+- **Binary-safe responses** with a Download button; non-text responses
+  (images, PDFs, archives) survive intact.
+- **cURL import/export**: paste a cURL command into a collection to create
+  a request, or copy any request as a runnable cURL command with variables
+  resolved.
+- **Request management**: hover menu on sidebar items with Rename, Copy,
+  Paste (across collections), Duplicate, and Delete; unsaved changes
+  highlight the Save button and prompt before navigating away.
 - **Auth helpers**: Bearer token, Basic auth, API key (header or query).
 - **Environments** (workspace-level) with `{{variable}}` interpolation in
   URLs, params, headers, auth fields, and bodies. The active environment is

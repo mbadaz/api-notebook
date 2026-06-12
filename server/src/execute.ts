@@ -1,10 +1,13 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { guessMime } from './mime.js';
 import type {
   ApiRequest,
   Environment,
   ExecutionResult,
   KeyValue,
 } from './types.js';
-import { HttpError } from './workspaceFs.js';
+import { expandHome, HttpError } from './workspaceFs.js';
 
 const REQUEST_TIMEOUT_MS = 30_000;
 
@@ -68,6 +71,12 @@ function resolveRequest(
       ...req.body,
       content: interpolate(req.body.content, vars),
       form: resolveKeyValues(req.body.form, vars),
+      formData: (req.body.formData ?? []).map((f) => ({
+        ...f,
+        key: interpolate(f.key, vars),
+        value: interpolate(f.value, vars),
+      })),
+      binaryPath: interpolate(req.body.binaryPath ?? '', vars),
     },
     graphql: {
       query: interpolate(req.graphql.query, vars),
@@ -121,7 +130,7 @@ export async function executeRequest(
   }
 
   const method = r.type === 'graphql' ? 'POST' : r.method;
-  let body: string | URLSearchParams | undefined;
+  let body: string | URLSearchParams | FormData | Buffer | undefined;
   if (r.type === 'graphql') {
     let variables: unknown = {};
     if (r.graphql.variables.trim()) {
@@ -142,6 +151,46 @@ export async function executeRequest(
         if (f.enabled && f.key) form.append(f.key, f.value);
       }
       body = form;
+    } else if (r.body.mode === 'formData') {
+      const fd = new FormData();
+      for (const f of r.body.formData ?? []) {
+        if (!f.enabled || !f.key) continue;
+        if (f.type === 'file') {
+          const filePath = path.resolve(expandHome(f.value));
+          if (!f.value.trim() || !fs.existsSync(filePath)) {
+            throw new HttpError(400, `Form field "${f.key}": file not found: ${f.value || '(empty)'}`);
+          }
+          const data = await fs.promises.readFile(filePath);
+          fd.append(
+            f.key,
+            new Blob([data], {
+              type: guessMime(filePath) ?? 'application/octet-stream',
+            }),
+            path.basename(filePath)
+          );
+        } else {
+          fd.append(f.key, f.value);
+        }
+      }
+      // fetch must generate the multipart boundary itself; a manually set
+      // content-type would not match it.
+      headers.delete('content-type');
+      body = fd;
+    } else if (r.body.mode === 'binary') {
+      if (!r.body.binaryPath?.trim()) {
+        throw new HttpError(400, 'Binary body: no file selected');
+      }
+      const filePath = path.resolve(expandHome(r.body.binaryPath));
+      if (!fs.existsSync(filePath)) {
+        throw new HttpError(400, `File not found: ${r.body.binaryPath}`);
+      }
+      body = await fs.promises.readFile(filePath);
+      if (!headers.has('content-type')) {
+        headers.set(
+          'content-type',
+          guessMime(filePath) ?? 'application/octet-stream'
+        );
+      }
     } else {
       body = r.body.content;
       if (!headers.has('content-type')) {
@@ -176,11 +225,24 @@ export async function executeRequest(
     responseHeaders[key] = value;
   });
 
+  // Keep valid UTF-8 as text; anything else (images, archives, PDFs…)
+  // travels as base64 so it survives JSON transport unmangled.
+  let bodyText: string;
+  let bodyEncoding: 'text' | 'base64';
+  try {
+    bodyText = new TextDecoder('utf-8', { fatal: true }).decode(buf);
+    bodyEncoding = 'text';
+  } catch {
+    bodyText = buf.toString('base64');
+    bodyEncoding = 'base64';
+  }
+
   return {
     status: response.status,
     statusText: response.statusText,
     headers: responseHeaders,
-    body: buf.toString('utf8'),
+    body: bodyText,
+    bodyEncoding,
     timeMs,
     sizeBytes: buf.length,
     resolvedUrl: url.toString(),

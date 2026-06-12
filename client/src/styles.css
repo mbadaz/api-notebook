@@ -281,11 +281,47 @@ pre,
 .type-env { background: #24303b; color: var(--blue); }
 .type-collection { background: #3b3324; color: var(--yellow); }
 
-.dirty-dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: var(--accent);
+.ctx-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 48;
+}
+
+.ctx-menu {
+  position: fixed;
+  min-width: 170px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  padding: 4px;
+  z-index: 49;
+  display: flex;
+  flex-direction: column;
+}
+
+.ctx-item {
+  text-align: left;
+  background: none;
+  border: none;
+  border-radius: 5px;
+  padding: 7px 10px;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.ctx-item:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.ctx-item:disabled {
+  color: var(--text-muted);
+  cursor: default;
+  opacity: 0.6;
+}
+
+.ctx-danger {
+  color: var(--red);
 }
 
 .active-badge {
@@ -526,6 +562,38 @@ input[type='radio'] {
 .kv-value.kv-secret-missing::placeholder {
   color: var(--yellow);
   opacity: 0.8;
+}
+
+.formdata-type {
+  width: 76px;
+  flex-shrink: 0;
+}
+
+.file-cell {
+  flex: 3;
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+}
+
+.file-cell .kv-value {
+  flex: 1;
+}
+
+.binary-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 10px;
+  max-width: 700px;
+}
+
+.binary-response {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 16px;
+  color: var(--text-muted);
 }
 
 .kv-static {

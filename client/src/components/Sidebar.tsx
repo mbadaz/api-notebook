@@ -1,30 +1,98 @@
-import { useState } from 'react';
+import { useState, type MouseEvent } from 'react';
 import type { Selection } from '../selection';
 import type { WorkspaceTree } from '../types';
+
+export interface RequestActions {
+  onRename: (collectionId: string, requestId: string) => void;
+  onCopy: (collectionId: string, requestId: string) => void;
+  onDuplicate: (collectionId: string, requestId: string) => void;
+  onDelete: (collectionId: string, requestId: string) => void;
+}
+
+export interface CollectionActions {
+  onNewRequest: (collectionId: string) => void;
+  onRename: (collectionId: string) => void;
+  onPasteRequest: (collectionId: string) => void;
+  onImportCurl: (collectionId: string) => void;
+  onDelete: (collectionId: string) => void;
+}
 
 interface Props {
   tree: WorkspaceTree;
   selection: Selection;
   width: number;
+  canPaste: boolean;
+  requestActions: RequestActions;
+  collectionActions: CollectionActions;
   onSelect: (selection: Selection) => void;
   onNewCollection: () => void;
-  onNewRequest: (collectionId: string) => void;
   onNewEnvironment: () => void;
+}
+
+interface MenuState {
+  kind: 'request' | 'collection';
+  collectionId: string;
+  requestId?: string;
+  x: number;
+  y: number;
+}
+
+interface MenuItem {
+  label: string;
+  danger?: boolean;
+  disabled?: boolean;
+  action: () => void;
 }
 
 export function Sidebar({
   tree,
   selection,
   width,
+  canPaste,
+  requestActions,
+  collectionActions,
   onSelect,
   onNewCollection,
-  onNewRequest,
   onNewEnvironment,
 }: Props) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const [menu, setMenu] = useState<MenuState | null>(null);
 
   const isSelected = (sel: Selection): boolean =>
     JSON.stringify(sel) === JSON.stringify(selection);
+
+  function openMenu(
+    e: MouseEvent<HTMLButtonElement>,
+    state: Omit<MenuState, 'x' | 'y'>
+  ) {
+    e.stopPropagation();
+    const rect = e.currentTarget.getBoundingClientRect();
+    setMenu({ ...state, x: rect.right, y: rect.bottom + 2 });
+  }
+
+  function menuItems(m: MenuState): MenuItem[] {
+    const cid = m.collectionId;
+    if (m.kind === 'request') {
+      const rid = m.requestId!;
+      return [
+        { label: 'Rename…', action: () => requestActions.onRename(cid, rid) },
+        { label: 'Copy', action: () => requestActions.onCopy(cid, rid) },
+        { label: 'Duplicate', action: () => requestActions.onDuplicate(cid, rid) },
+        { label: 'Delete', danger: true, action: () => requestActions.onDelete(cid, rid) },
+      ];
+    }
+    return [
+      { label: 'New Request…', action: () => collectionActions.onNewRequest(cid) },
+      { label: 'Rename…', action: () => collectionActions.onRename(cid) },
+      {
+        label: 'Paste Request',
+        disabled: !canPaste,
+        action: () => collectionActions.onPasteRequest(cid),
+      },
+      { label: 'Import cURL…', action: () => collectionActions.onImportCurl(cid) },
+      { label: 'Delete', danger: true, action: () => collectionActions.onDelete(cid) },
+    ];
+  }
 
   return (
     <aside className="sidebar" style={{ width, minWidth: width }}>
@@ -72,10 +140,12 @@ export function Sidebar({
               </button>
               <button
                 className="icon-btn"
-                title="New request"
-                onClick={() => onNewRequest(collection.id)}
+                title="Collection actions"
+                onClick={(e) =>
+                  openMenu(e, { kind: 'collection', collectionId: collection.id })
+                }
               >
-                +
+                ⋯
               </button>
             </div>
             {!collapsed[collection.id] &&
@@ -112,6 +182,19 @@ export function Sidebar({
                       {request.type === 'graphql' ? 'GQL' : request.method}
                     </span>
                     {request.name}
+                  </button>
+                  <button
+                    className="icon-btn"
+                    title="Request actions"
+                    onClick={(e) =>
+                      openMenu(e, {
+                        kind: 'request',
+                        collectionId: collection.id,
+                        requestId: request.id,
+                      })
+                    }
+                  >
+                    ⋯
                   </button>
                 </div>
               ))}
@@ -158,6 +241,33 @@ export function Sidebar({
       <div className="sidebar-footer" title={tree.meta.path}>
         {tree.meta.path}
       </div>
+
+      {menu && (
+        <>
+          <div className="ctx-backdrop" onMouseDown={() => setMenu(null)} />
+          <div
+            className="ctx-menu"
+            style={{
+              top: menu.y,
+              left: Math.min(menu.x, window.innerWidth - 190),
+            }}
+          >
+            {menuItems(menu).map((item) => (
+              <button
+                key={item.label}
+                className={item.danger ? 'ctx-item ctx-danger' : 'ctx-item'}
+                disabled={item.disabled}
+                onClick={() => {
+                  setMenu(null);
+                  item.action();
+                }}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
     </aside>
   );
 }

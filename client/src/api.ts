@@ -34,6 +34,9 @@ export const api = {
   pickFolder: (title: string) =>
     http<{ path: string | null }>('/api/pick-folder', json({ title })),
 
+  pickFile: (title: string) =>
+    http<{ path: string | null }>('/api/pick-file', json({ title })),
+
   listWorkspaces: () => http<WorkspaceMeta[]>('/api/workspaces'),
 
   createWorkspace: (name: string, path: string) =>

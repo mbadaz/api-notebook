@@ -29,12 +29,22 @@ export interface AuthConfig {
   apiKey?: { key: string; value: string; placement: 'header' | 'query' };
 }
 
-export type BodyMode = 'none' | 'json' | 'text' | 'form';
+export type BodyMode = 'none' | 'json' | 'text' | 'form' | 'formData' | 'binary';
+
+export interface FormDataField {
+  key: string;
+  /** Text value, or an absolute file path when type === 'file'. */
+  value: string;
+  type: 'text' | 'file';
+  enabled: boolean;
+}
 
 export interface RequestBody {
   mode: BodyMode;
   content: string;
   form: KeyValue[];
+  formData: FormDataField[];
+  binaryPath: string;
 }
 
 export interface GraphQLBody {
@@ -86,7 +96,9 @@ export interface ExecutionResult {
   status: number;
   statusText: string;
   headers: Record<string, string>;
+  /** Response body: UTF-8 text, or base64 when bodyEncoding is 'base64'. */
   body: string;
+  bodyEncoding: 'text' | 'base64';
   timeMs: number;
   sizeBytes: number;
   resolvedUrl: string;

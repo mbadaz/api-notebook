@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import type { Collection } from '../types';
 
@@ -6,9 +6,15 @@ interface Props {
   collection: Collection;
   onSave: (changes: { name: string; description: string }) => Promise<void>;
   onDelete: () => void;
+  onDirtyChange: (dirty: boolean) => void;
 }
 
-export function CollectionEditor({ collection, onSave, onDelete }: Props) {
+export function CollectionEditor({
+  collection,
+  onSave,
+  onDelete,
+  onDirtyChange,
+}: Props) {
   const [name, setName] = useState(collection.name);
   const [description, setDescription] = useState(collection.description);
   const [preview, setPreview] = useState(false);
@@ -16,6 +22,11 @@ export function CollectionEditor({ collection, onSave, onDelete }: Props) {
 
   const dirty =
     name !== collection.name || description !== collection.description;
+
+  useEffect(() => {
+    onDirtyChange(dirty);
+  }, [dirty, onDirtyChange]);
+  useEffect(() => () => onDirtyChange(false), [onDirtyChange]);
 
   async function save() {
     setError(null);
@@ -35,8 +46,11 @@ export function CollectionEditor({ collection, onSave, onDelete }: Props) {
           value={name}
           onChange={(e) => setName(e.target.value)}
         />
-        {dirty && <span className="dirty-dot" title="Unsaved changes" />}
-        <button className="btn" onClick={save}>
+        <button
+          className={dirty ? 'btn btn-primary' : 'btn'}
+          title={dirty ? 'You have unsaved changes' : 'No unsaved changes'}
+          onClick={save}
+        >
           Save
         </button>
         <button className="btn btn-danger-ghost" onClick={onDelete}>

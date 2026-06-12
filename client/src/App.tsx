@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from './api';
 import { CollectionEditor } from './components/CollectionEditor';
 import { EnvironmentEditor } from './components/EnvironmentEditor';
@@ -6,8 +6,9 @@ import { PromptModal, type PromptConfig } from './components/PromptModal';
 import { RequestEditor } from './components/RequestEditor';
 import { Sidebar } from './components/Sidebar';
 import { TopBar } from './components/TopBar';
+import { parseCurl } from './curl';
 import type { Selection } from './selection';
-import type { WorkspaceMeta, WorkspaceTree } from './types';
+import type { ApiRequest, WorkspaceMeta, WorkspaceTree } from './types';
 import { VariablesContext, type VariablesInfo } from './variables';
 
 const LAST_WORKSPACE_KEY = 'apinotebook.lastWorkspace';
@@ -22,37 +23,15 @@ export default function App() {
   const [selection, setSelection] = useState<Selection>(null);
   const [prompt, setPrompt] = useState<PromptConfig | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [clipboard, setClipboard] = useState<ApiRequest | null>(null);
+  const [editorDirty, setEditorDirty] = useState(false);
+  const editorDirtyRef = useRef(false);
   const [sidebarWidth, setSidebarWidth] = useState(() => {
     const saved = Number(localStorage.getItem(SIDEBAR_WIDTH_KEY));
     return Number.isFinite(saved) && saved >= SIDEBAR_MIN
       ? Math.min(saved, SIDEBAR_MAX)
       : 280;
   });
-
-  function startSidebarResize(e: React.MouseEvent) {
-    e.preventDefault();
-    const startX = e.clientX;
-    const startWidth = sidebarWidth;
-    document.body.style.cursor = 'col-resize';
-    document.body.style.userSelect = 'none';
-    let width = startWidth;
-    function onMove(ev: MouseEvent) {
-      width = Math.min(
-        SIDEBAR_MAX,
-        Math.max(SIDEBAR_MIN, startWidth + ev.clientX - startX)
-      );
-      setSidebarWidth(width);
-    }
-    function onUp() {
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-      localStorage.setItem(SIDEBAR_WIDTH_KEY, String(width));
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
-    }
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
-  }
 
   const workspaceId = tree?.meta.id ?? null;
 
@@ -73,6 +52,35 @@ export default function App() {
     },
     [showError]
   );
+
+  const handleDirtyChange = useCallback((dirty: boolean) => {
+    editorDirtyRef.current = dirty;
+    setEditorDirty(dirty);
+  }, []);
+
+  /** True when it is OK to discard the current editor state. */
+  function confirmDiscard(): boolean {
+    return (
+      !editorDirtyRef.current ||
+      confirm('You have unsaved changes that will be lost. Continue?')
+    );
+  }
+
+  function selectGuarded(sel: Selection) {
+    if (!confirmDiscard()) return;
+    handleDirtyChange(false);
+    setSelection(sel);
+  }
+
+  useEffect(() => {
+    if (!editorDirty) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [editorDirty]);
 
   const variablesInfo = useMemo<VariablesInfo>(() => {
     const activeEnv = tree?.environments.find(
@@ -134,6 +142,42 @@ export default function App() {
     setWorkspaces(await api.listWorkspaces());
   }
 
+  function startSidebarResize(e: React.MouseEvent) {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = sidebarWidth;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    let width = startWidth;
+    function onMove(ev: MouseEvent) {
+      width = Math.min(
+        SIDEBAR_MAX,
+        Math.max(SIDEBAR_MIN, startWidth + ev.clientX - startX)
+      );
+      setSidebarWidth(width);
+    }
+    function onUp() {
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      localStorage.setItem(SIDEBAR_WIDTH_KEY, String(width));
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    }
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }
+
+  function findRequest(
+    collectionId: string,
+    requestId: string
+  ): ApiRequest | undefined {
+    return tree?.collections
+      .find((c) => c.id === collectionId)
+      ?.requests.find((r) => r.id === requestId);
+  }
+
+  // ----- workspace prompts -----
+
   function promptNewWorkspace() {
     setPrompt({
       title: 'New Workspace',
@@ -174,6 +218,8 @@ export default function App() {
     });
   }
 
+  // ----- collection / request / environment actions -----
+
   function promptNewCollection() {
     if (!workspaceId) return;
     setPrompt({
@@ -182,7 +228,9 @@ export default function App() {
       onSubmit: async (values) => {
         const collection = await api.createCollection(workspaceId, values.name);
         await loadTree(workspaceId, true);
-        setSelection({ kind: 'collection', collectionId: collection.id });
+        if (!editorDirtyRef.current) {
+          setSelection({ kind: 'collection', collectionId: collection.id });
+        }
       },
     });
   }
@@ -211,7 +259,13 @@ export default function App() {
           values.type === 'graphql' ? 'graphql' : 'http'
         );
         await loadTree(workspaceId, true);
-        setSelection({ kind: 'request', collectionId, requestId: request.id });
+        if (!editorDirtyRef.current) {
+          setSelection({
+            kind: 'request',
+            collectionId,
+            requestId: request.id,
+          });
+        }
       },
     });
   }
@@ -224,9 +278,152 @@ export default function App() {
       onSubmit: async (values) => {
         const env = await api.createEnvironment(workspaceId, values.name);
         await loadTree(workspaceId, true);
-        setSelection({ kind: 'environment', environmentId: env.id });
+        if (!editorDirtyRef.current) {
+          setSelection({ kind: 'environment', environmentId: env.id });
+        }
       },
     });
+  }
+
+  function promptRenameRequest(collectionId: string, requestId: string) {
+    const request = findRequest(collectionId, requestId);
+    if (!request || !workspaceId) return;
+    setPrompt({
+      title: 'Rename Request',
+      submitLabel: 'Rename',
+      fields: [{ name: 'name', label: 'Name', initial: request.name }],
+      onSubmit: async (values) => {
+        const name = values.name.trim();
+        if (!name) throw new Error('Name is required');
+        await api.updateRequest(workspaceId, collectionId, {
+          ...request,
+          name,
+        });
+        await loadTree(workspaceId, true);
+      },
+    });
+  }
+
+  function promptRenameCollection(collectionId: string) {
+    const collection = tree?.collections.find((c) => c.id === collectionId);
+    if (!collection || !workspaceId) return;
+    setPrompt({
+      title: 'Rename Collection',
+      submitLabel: 'Rename',
+      fields: [{ name: 'name', label: 'Name', initial: collection.name }],
+      onSubmit: async (values) => {
+        const name = values.name.trim();
+        if (!name) throw new Error('Name is required');
+        await api.updateCollection(workspaceId, collectionId, { name });
+        await loadTree(workspaceId, true);
+      },
+    });
+  }
+
+  function promptImportCurl(collectionId: string) {
+    if (!workspaceId) return;
+    setPrompt({
+      title: 'Import cURL',
+      submitLabel: 'Import',
+      fields: [
+        {
+          name: 'command',
+          label: 'Paste a cURL command',
+          type: 'textarea',
+          placeholder:
+            "curl 'https://api.example.com/users' -H 'Accept: application/json'",
+        },
+      ],
+      onSubmit: async (values) => {
+        const parsed = parseCurl(values.command);
+        const created = await api.createRequest(
+          workspaceId,
+          collectionId,
+          parsed.name,
+          'http'
+        );
+        await api.updateRequest(workspaceId, collectionId, {
+          ...parsed,
+          id: created.id,
+        });
+        await loadTree(workspaceId, true);
+        if (!editorDirtyRef.current) {
+          setSelection({
+            kind: 'request',
+            collectionId,
+            requestId: created.id,
+          });
+        }
+      },
+    });
+  }
+
+  async function copyRequestInto(
+    collectionId: string,
+    source: ApiRequest,
+    name: string
+  ) {
+    if (!workspaceId) return;
+    try {
+      const created = await api.createRequest(
+        workspaceId,
+        collectionId,
+        name,
+        source.type
+      );
+      await api.updateRequest(workspaceId, collectionId, {
+        ...structuredClone(source),
+        id: created.id,
+        name,
+      });
+      await loadTree(workspaceId, true);
+    } catch (err) {
+      showError(err);
+    }
+  }
+
+  async function deleteRequestAction(collectionId: string, request: ApiRequest) {
+    if (!workspaceId) return;
+    if (!confirm(`Delete request "${request.name}"?`)) return;
+    try {
+      await api.deleteRequest(workspaceId, collectionId, request.id);
+      setSelection((sel) =>
+        sel?.kind === 'request' &&
+        sel.collectionId === collectionId &&
+        sel.requestId === request.id
+          ? null
+          : sel
+      );
+      handleDirtyChange(false);
+      await loadTree(workspaceId, true);
+    } catch (err) {
+      showError(err);
+    }
+  }
+
+  async function deleteCollectionAction(collection: {
+    id: string;
+    name: string;
+  }) {
+    if (!workspaceId) return;
+    if (
+      !confirm(`Delete collection "${collection.name}" and all its requests?`)
+    ) {
+      return;
+    }
+    try {
+      await api.deleteCollection(workspaceId, collection.id);
+      setSelection((sel) =>
+        (sel?.kind === 'collection' || sel?.kind === 'request') &&
+        sel.collectionId === collection.id
+          ? null
+          : sel
+      );
+      handleDirtyChange(false);
+      await loadTree(workspaceId, true);
+    } catch (err) {
+      showError(err);
+    }
   }
 
   async function selectEnvironment(environmentId: string | null) {
@@ -276,16 +473,8 @@ export default function App() {
             collectionId={collection.id}
             request={request}
             onSaved={() => loadTree(tree.meta.id, true)}
-            onDelete={async () => {
-              if (!confirm(`Delete request "${request.name}"?`)) return;
-              try {
-                await api.deleteRequest(tree.meta.id, collection.id, request.id);
-                setSelection(null);
-                await loadTree(tree.meta.id, true);
-              } catch (err) {
-                showError(err);
-              }
-            }}
+            onDelete={() => deleteRequestAction(collection.id, request)}
+            onDirtyChange={handleDirtyChange}
           />
         );
       }
@@ -304,22 +493,8 @@ export default function App() {
               await api.updateCollection(tree.meta.id, collection.id, changes);
               await loadTree(tree.meta.id, true);
             }}
-            onDelete={async () => {
-              if (
-                !confirm(
-                  `Delete collection "${collection.name}" and all its requests?`
-                )
-              ) {
-                return;
-              }
-              try {
-                await api.deleteCollection(tree.meta.id, collection.id);
-                setSelection(null);
-                await loadTree(tree.meta.id, true);
-              } catch (err) {
-                showError(err);
-              }
-            }}
+            onDelete={() => deleteCollectionAction(collection)}
+            onDirtyChange={handleDirtyChange}
           />
         );
       }
@@ -349,11 +524,13 @@ export default function App() {
               try {
                 await api.deleteEnvironment(tree.meta.id, environment.id);
                 setSelection(null);
+                handleDirtyChange(false);
                 await loadTree(tree.meta.id, true);
               } catch (err) {
                 showError(err);
               }
             }}
+            onDirtyChange={handleDirtyChange}
           />
         );
       }
@@ -374,7 +551,11 @@ export default function App() {
       <TopBar
         workspaces={workspaces}
         currentWorkspaceId={workspaceId}
-        onSelectWorkspace={(id) => loadTree(id)}
+        onSelectWorkspace={(id) => {
+          if (!confirmDiscard()) return;
+          handleDirtyChange(false);
+          void loadTree(id);
+        }}
         onNewWorkspace={promptNewWorkspace}
         onOpenWorkspace={promptOpenWorkspace}
         environments={tree?.environments ?? []}
@@ -389,9 +570,42 @@ export default function App() {
                 tree={tree}
                 selection={selection}
                 width={sidebarWidth}
-                onSelect={setSelection}
+                canPaste={clipboard !== null}
+                requestActions={{
+                  onRename: promptRenameRequest,
+                  onCopy: (cid, rid) => {
+                    const request = findRequest(cid, rid);
+                    if (request) setClipboard(structuredClone(request));
+                  },
+                  onDuplicate: (cid, rid) => {
+                    const request = findRequest(cid, rid);
+                    if (request) {
+                      void copyRequestInto(cid, request, `${request.name} copy`);
+                    }
+                  },
+                  onDelete: (cid, rid) => {
+                    const request = findRequest(cid, rid);
+                    if (request) void deleteRequestAction(cid, request);
+                  },
+                }}
+                collectionActions={{
+                  onNewRequest: promptNewRequest,
+                  onRename: promptRenameCollection,
+                  onPasteRequest: (cid) => {
+                    if (clipboard) {
+                      void copyRequestInto(cid, clipboard, clipboard.name);
+                    }
+                  },
+                  onImportCurl: promptImportCurl,
+                  onDelete: (cid) => {
+                    const collection = tree.collections.find(
+                      (c) => c.id === cid
+                    );
+                    if (collection) void deleteCollectionAction(collection);
+                  },
+                }}
+                onSelect={selectGuarded}
                 onNewCollection={promptNewCollection}
-                onNewRequest={promptNewRequest}
                 onNewEnvironment={promptNewEnvironment}
               />
               <div

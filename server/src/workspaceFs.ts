@@ -38,7 +38,7 @@ function uniqueSlug(base: string, taken: Set<string>): string {
   return `${base}-${i}`;
 }
 
-function expandHome(p: string): string {
+export function expandHome(p: string): string {
   return p === '~' || p.startsWith('~/')
     ? path.join(os.homedir(), p.slice(1))
     : p;
@@ -151,7 +151,20 @@ function readRequest(
   const docs = fs.existsSync(docsFile)
     ? fs.readFileSync(docsFile, 'utf8')
     : '';
-  return { ...stored, id, docs };
+  return {
+    ...stored,
+    // Files written by older versions may predate newer body fields.
+    body: {
+      mode: 'none',
+      content: '',
+      form: [],
+      formData: [],
+      binaryPath: '',
+      ...(stored.body ?? {}),
+    },
+    id,
+    docs,
+  };
 }
 
 function readCollection(ws: WorkspaceMeta, id: string): Collection {
@@ -254,7 +267,7 @@ export function defaultRequest(
     params: [],
     headers: [],
     auth: { type: 'none' },
-    body: { mode: 'none', content: '', form: [] },
+    body: { mode: 'none', content: '', form: [], formData: [], binaryPath: '' },
     graphql: { query: '', variables: '' },
     docs: '',
   };

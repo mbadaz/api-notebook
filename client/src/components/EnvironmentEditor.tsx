@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { Environment, KeyValue } from '../types';
 
 import { KeyValueEditor } from './KeyValueEditor';
@@ -9,6 +9,7 @@ interface Props {
   onSave: (changes: { name: string; variables: KeyValue[] }) => Promise<void>;
   onActivate: () => void;
   onDelete: () => void;
+  onDirtyChange: (dirty: boolean) => void;
 }
 
 export function EnvironmentEditor({
@@ -17,6 +18,7 @@ export function EnvironmentEditor({
   onSave,
   onActivate,
   onDelete,
+  onDirtyChange,
 }: Props) {
   const [name, setName] = useState(environment.name);
   const [variables, setVariables] = useState(environment.variables);
@@ -25,6 +27,11 @@ export function EnvironmentEditor({
   const dirty =
     name !== environment.name ||
     JSON.stringify(variables) !== JSON.stringify(environment.variables);
+
+  useEffect(() => {
+    onDirtyChange(dirty);
+  }, [dirty, onDirtyChange]);
+  useEffect(() => () => onDirtyChange(false), [onDirtyChange]);
 
   async function save() {
     setError(null);
@@ -44,8 +51,11 @@ export function EnvironmentEditor({
           value={name}
           onChange={(e) => setName(e.target.value)}
         />
-        {dirty && <span className="dirty-dot" title="Unsaved changes" />}
-        <button className="btn" onClick={save}>
+        <button
+          className={dirty ? 'btn btn-primary' : 'btn'}
+          title={dirty ? 'You have unsaved changes' : 'No unsaved changes'}
+          onClick={save}
+        >
           Save
         </button>
         {isActive ? (

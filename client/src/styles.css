@@ -90,12 +90,25 @@ pre,
 
 .sidebar {
   width: 280px;
-  min-width: 280px;
   display: flex;
   flex-direction: column;
   background: var(--bg-raised);
   border-right: 1px solid var(--border);
   overflow-y: auto;
+  flex-shrink: 0;
+}
+
+.sidebar-resizer {
+  width: 5px;
+  margin-left: -5px;
+  flex-shrink: 0;
+  cursor: col-resize;
+  z-index: 5;
+}
+
+.sidebar-resizer:hover,
+.sidebar-resizer:active {
+  background: var(--accent-dim);
 }
 
 .sidebar-section {

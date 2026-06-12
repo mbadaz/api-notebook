@@ -11,6 +11,9 @@ import type { WorkspaceMeta, WorkspaceTree } from './types';
 import { VariablesContext, type VariablesInfo } from './variables';
 
 const LAST_WORKSPACE_KEY = 'apinotebook.lastWorkspace';
+const SIDEBAR_WIDTH_KEY = 'apinotebook.sidebarWidth';
+const SIDEBAR_MIN = 180;
+const SIDEBAR_MAX = 600;
 
 export default function App() {
   const [workspaces, setWorkspaces] = useState<WorkspaceMeta[]>([]);
@@ -19,6 +22,37 @@ export default function App() {
   const [selection, setSelection] = useState<Selection>(null);
   const [prompt, setPrompt] = useState<PromptConfig | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [sidebarWidth, setSidebarWidth] = useState(() => {
+    const saved = Number(localStorage.getItem(SIDEBAR_WIDTH_KEY));
+    return Number.isFinite(saved) && saved >= SIDEBAR_MIN
+      ? Math.min(saved, SIDEBAR_MAX)
+      : 280;
+  });
+
+  function startSidebarResize(e: React.MouseEvent) {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = sidebarWidth;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    let width = startWidth;
+    function onMove(ev: MouseEvent) {
+      width = Math.min(
+        SIDEBAR_MAX,
+        Math.max(SIDEBAR_MIN, startWidth + ev.clientX - startX)
+      );
+      setSidebarWidth(width);
+    }
+    function onUp() {
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      localStorage.setItem(SIDEBAR_WIDTH_KEY, String(width));
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    }
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }
 
   const workspaceId = tree?.meta.id ?? null;
 
@@ -350,14 +384,22 @@ export default function App() {
       <VariablesContext.Provider value={variablesInfo}>
         <div className="app-body">
           {tree && (
-            <Sidebar
-              tree={tree}
-              selection={selection}
-              onSelect={setSelection}
-              onNewCollection={promptNewCollection}
-              onNewRequest={promptNewRequest}
-              onNewEnvironment={promptNewEnvironment}
-            />
+            <>
+              <Sidebar
+                tree={tree}
+                selection={selection}
+                width={sidebarWidth}
+                onSelect={setSelection}
+                onNewCollection={promptNewCollection}
+                onNewRequest={promptNewRequest}
+                onNewEnvironment={promptNewEnvironment}
+              />
+              <div
+                className="sidebar-resizer"
+                title="Drag to resize the sidebar"
+                onMouseDown={startSidebarResize}
+              />
+            </>
           )}
           <main className="main-pane">{renderMain()}</main>
         </div>

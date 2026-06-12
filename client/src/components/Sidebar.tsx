@@ -5,6 +5,7 @@ import type { WorkspaceTree } from '../types';
 interface Props {
   tree: WorkspaceTree;
   selection: Selection;
+  width: number;
   onSelect: (selection: Selection) => void;
   onNewCollection: () => void;
   onNewRequest: (collectionId: string) => void;
@@ -14,6 +15,7 @@ interface Props {
 export function Sidebar({
   tree,
   selection,
+  width,
   onSelect,
   onNewCollection,
   onNewRequest,
@@ -25,7 +27,7 @@ export function Sidebar({
     JSON.stringify(sel) === JSON.stringify(selection);
 
   return (
-    <aside className="sidebar">
+    <aside className="sidebar" style={{ width, minWidth: width }}>
       <div className="sidebar-section">
         <div className="sidebar-heading">
           <span>Collections</span>

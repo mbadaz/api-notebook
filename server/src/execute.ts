@@ -130,7 +130,7 @@ export async function executeRequest(
   }
 
   const method = r.type === 'graphql' ? 'POST' : r.method;
-  let body: string | URLSearchParams | FormData | Buffer | undefined;
+  let body: BodyInit | undefined;
   if (r.type === 'graphql') {
     let variables: unknown = {};
     if (r.graphql.variables.trim()) {
@@ -184,7 +184,11 @@ export async function executeRequest(
       if (!fs.existsSync(filePath)) {
         throw new HttpError(400, `File not found: ${r.body.binaryPath}`);
       }
-      body = await fs.promises.readFile(filePath);
+      // Valid at runtime; @types/node's BodyInit doesn't admit
+      // Uint8Array<ArrayBufferLike>, hence the cast.
+      body = new Uint8Array(
+        await fs.promises.readFile(filePath)
+      ) as unknown as BodyInit;
       if (!headers.has('content-type')) {
         headers.set(
           'content-type',

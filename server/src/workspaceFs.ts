@@ -151,16 +151,17 @@ function readRequest(
   const docs = fs.existsSync(docsFile)
     ? fs.readFileSync(docsFile, 'utf8')
     : '';
+  // Files written by older versions may predate newer body fields.
+  const storedBody: Partial<ApiRequest['body']> = stored.body ?? {};
   return {
     ...stored,
-    // Files written by older versions may predate newer body fields.
     body: {
       mode: 'none',
       content: '',
       form: [],
       formData: [],
       binaryPath: '',
-      ...(stored.body ?? {}),
+      ...storedBody,
     },
     id,
     docs,

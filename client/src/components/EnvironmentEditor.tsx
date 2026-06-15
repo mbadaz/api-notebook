@@ -24,9 +24,17 @@ export function EnvironmentEditor({
   const [variables, setVariables] = useState(environment.variables);
   const [error, setError] = useState<string | null>(null);
 
+  // Toggling 🔒 on and off leaves `secret: false` where the saved file has
+  // no `secret` key at all; normalize so that doesn't read as a change.
+  const normalizeVars = (vars: KeyValue[]) =>
+    vars.map(({ key, value, enabled, secret }) =>
+      secret ? { key, value, enabled, secret: true } : { key, value, enabled }
+    );
+
   const dirty =
     name !== environment.name ||
-    JSON.stringify(variables) !== JSON.stringify(environment.variables);
+    JSON.stringify(normalizeVars(variables)) !==
+      JSON.stringify(normalizeVars(environment.variables));
 
   useEffect(() => {
     onDirtyChange(dirty);
@@ -36,7 +44,7 @@ export function EnvironmentEditor({
   async function save() {
     setError(null);
     try {
-      await onSave({ name, variables });
+      await onSave({ name, variables: normalizeVars(variables) });
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }

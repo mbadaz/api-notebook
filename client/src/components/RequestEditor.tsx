@@ -6,6 +6,7 @@ import { requestToCurl } from '../curl';
 import {
   HTTP_METHODS,
   type ApiRequest,
+  type AuthConfig,
   type BodyMode,
   type ExecutionResult,
   type HttpMethod,
@@ -27,6 +28,24 @@ interface Props {
 }
 
 type Tab = 'params' | 'headers' | 'auth' | 'body' | 'docs';
+
+/**
+ * Editing auth fields materializes sub-objects (bearer/basic/apiKey) that
+ * stick around after switching the type back — which made reverted edits
+ * compare as dirty forever. Canonical form keeps only the active section,
+ * so comparisons (and saved files) ignore leftovers from abandoned types.
+ */
+function canonical(req: ApiRequest): ApiRequest {
+  const auth: AuthConfig = { type: req.auth.type };
+  if (req.auth.type === 'bearer') {
+    auth.bearer = req.auth.bearer ?? { token: '' };
+  } else if (req.auth.type === 'basic') {
+    auth.basic = req.auth.basic ?? { username: '', password: '' };
+  } else if (req.auth.type === 'apiKey') {
+    auth.apiKey = req.auth.apiKey ?? { key: '', value: '', placement: 'header' };
+  }
+  return { ...req, auth };
+}
 
 const BODY_MODES: { value: BodyMode; label: string }[] = [
   { value: 'none', label: 'None' },
@@ -58,7 +77,8 @@ export function RequestEditor({
   const [browsingBinary, setBrowsingBinary] = useState(false);
   const { vars } = useContext(VariablesContext);
 
-  const dirty = JSON.stringify(draft) !== JSON.stringify(saved);
+  const dirty =
+    JSON.stringify(canonical(draft)) !== JSON.stringify(canonical(saved));
   const isGraphql = draft.type === 'graphql';
 
   useEffect(() => {
@@ -82,10 +102,12 @@ export function RequestEditor({
 
   async function save() {
     setSaveError(null);
+    const clean = canonical(draft);
     try {
-      await api.updateRequest(workspaceId, collectionId, draft);
-      setSaved(draft);
-      onSaved(draft);
+      await api.updateRequest(workspaceId, collectionId, clean);
+      setSaved(clean);
+      setDraft(clean);
+      onSaved(clean);
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : String(err));
     }

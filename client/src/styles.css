@@ -662,32 +662,177 @@ input[type='radio'] {
   justify-content: space-between;
 }
 
-.markdown-preview {
-  min-height: 180px;
-  overflow-y: auto;
-  background: var(--bg-input);
+/* ---------- markdown WYSIWYG editor ---------- */
+
+.md-editor {
+  display: flex;
+  flex-direction: column;
   border: 1px solid var(--border);
   border-radius: 6px;
-  padding: 8px 16px;
-  line-height: 1.55;
+  overflow: hidden;
 }
 
-.markdown-preview pre {
+.md-loading {
+  padding: 14px 16px;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.md-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1px;
+  padding: 4px 6px;
+  background: var(--bg-raised);
+  border-bottom: 1px solid var(--border);
+}
+
+.md-tool {
+  min-width: 28px;
+  height: 28px;
+  padding: 0 6px;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.md-tool:hover:not(:disabled) {
+  background: var(--bg-input);
+  color: var(--text);
+}
+
+.md-tool.is-active {
+  background: var(--accent-dim);
+  color: var(--text);
+}
+
+.md-tool:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.md-sep {
+  width: 1px;
+  align-self: stretch;
+  margin: 3px 4px;
+  background: var(--border);
+}
+
+.md-content {
+  height: 280px;
+  min-height: 120px;
+  overflow-y: auto;
+  resize: vertical;
+  background: var(--bg-input);
+}
+
+.md-content .ProseMirror {
+  min-height: 100%;
+  padding: 10px 16px;
+  line-height: 1.55;
+  outline: none;
+}
+
+.md-content .ProseMirror > *:first-child {
+  margin-top: 0;
+}
+
+.md-content .ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  color: var(--text-muted);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+
+.md-content h1,
+.md-content h2,
+.md-content h3 {
+  line-height: 1.25;
+  margin: 0.8em 0 0.4em;
+}
+
+.md-content pre {
   background: var(--bg-raised);
   padding: 10px;
   border-radius: 6px;
   overflow-x: auto;
 }
 
-.markdown-preview code {
+.md-content pre code {
+  background: none;
+  padding: 0;
+  font-size: 0.86em;
+}
+
+.md-content code {
   background: var(--bg-raised);
   padding: 1px 5px;
   border-radius: 4px;
   font-size: 0.86em;
 }
 
-.markdown-preview a {
+.md-content a {
   color: var(--blue);
+}
+
+.md-content blockquote {
+  margin: 0.6em 0;
+  padding-left: 12px;
+  border-left: 3px solid var(--border);
+  color: var(--text-muted);
+}
+
+.md-content img {
+  max-width: 100%;
+  border-radius: 4px;
+}
+
+.md-content hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 1em 0;
+}
+
+.md-content table {
+  border-collapse: collapse;
+  margin: 0.6em 0;
+  width: auto;
+}
+
+.md-content th,
+.md-content td {
+  border: 1px solid var(--border);
+  padding: 4px 10px;
+  text-align: left;
+}
+
+.md-content th {
+  background: var(--bg-raised);
+  font-weight: 600;
+}
+
+.md-content ul[data-type='taskList'] {
+  list-style: none;
+  padding-left: 4px;
+}
+
+.md-content ul[data-type='taskList'] li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.md-content ul[data-type='taskList'] li > label {
+  margin-top: 3px;
+}
+
+.md-content ul[data-type='taskList'] li > div {
+  flex: 1;
 }
 
 /* ---------- response panel ---------- */

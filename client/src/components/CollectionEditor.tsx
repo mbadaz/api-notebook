@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import ReactMarkdown from 'react-markdown';
 import type { Collection } from '../types';
+import { LazyMarkdownEditor } from './LazyMarkdownEditor';
 
 interface Props {
   collection: Collection;
@@ -17,7 +17,6 @@ export function CollectionEditor({
 }: Props) {
   const [name, setName] = useState(collection.name);
   const [description, setDescription] = useState(collection.description);
-  const [preview, setPreview] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const dirty =
@@ -60,37 +59,14 @@ export function CollectionEditor({
       {error && <p className="error-text">{error}</p>}
       <div className="docs-toolbar">
         <span className="panel-title">Description</span>
-        <div className="tab-group">
-          <button
-            className={!preview ? 'tab active' : 'tab'}
-            onClick={() => setPreview(false)}
-          >
-            Write
-          </button>
-          <button
-            className={preview ? 'tab active' : 'tab'}
-            onClick={() => setPreview(true)}
-          >
-            Preview
-          </button>
-        </div>
       </div>
-      {preview ? (
-        <div className="markdown-preview">
-          {description.trim() ? (
-            <ReactMarkdown>{description}</ReactMarkdown>
-          ) : (
-            <p className="muted">Nothing to preview.</p>
-          )}
-        </div>
-      ) : (
-        <textarea
-          className="code-area"
+      <div className="docs-editor">
+        <LazyMarkdownEditor
           value={description}
+          onChange={setDescription}
           placeholder="Describe this collection in Markdown…"
-          onChange={(e) => setDescription(e.target.value)}
         />
-      )}
+      </div>
     </div>
   );
 }

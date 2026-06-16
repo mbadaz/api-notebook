@@ -1,5 +1,4 @@
 import { useContext, useEffect, useState } from 'react';
-import ReactMarkdown from 'react-markdown';
 import { api } from '../api';
 import { beautifyGraphql, beautifyJson } from '../beautify';
 import { requestToCurl } from '../curl';
@@ -14,6 +13,7 @@ import {
 import { VariablesContext } from '../variables';
 import { AuthEditor } from './AuthEditor';
 import { FormDataEditor } from './FormDataEditor';
+import { LazyMarkdownEditor } from './LazyMarkdownEditor';
 import { KeyValueEditor } from './KeyValueEditor';
 import { ResponsePanel } from './ResponsePanel';
 import { VarField } from './VarField';
@@ -67,7 +67,6 @@ export function RequestEditor({
   const [saved, setSaved] = useState(request);
   const [draft, setDraft] = useState(request);
   const [tab, setTab] = useState<Tab>('params');
-  const [docsPreview, setDocsPreview] = useState(false);
   const [response, setResponse] = useState<ExecutionResult | null>(null);
   const [execError, setExecError] = useState<string | null>(null);
   const [executing, setExecuting] = useState(false);
@@ -421,38 +420,11 @@ export function RequestEditor({
 
         {tab === 'docs' && (
           <div className="docs-editor">
-            <div className="docs-toolbar">
-              <div className="tab-group">
-                <button
-                  className={!docsPreview ? 'tab active' : 'tab'}
-                  onClick={() => setDocsPreview(false)}
-                >
-                  Write
-                </button>
-                <button
-                  className={docsPreview ? 'tab active' : 'tab'}
-                  onClick={() => setDocsPreview(true)}
-                >
-                  Preview
-                </button>
-              </div>
-            </div>
-            {docsPreview ? (
-              <div className="markdown-preview">
-                {draft.docs.trim() ? (
-                  <ReactMarkdown>{draft.docs}</ReactMarkdown>
-                ) : (
-                  <p className="muted">Nothing to preview.</p>
-                )}
-              </div>
-            ) : (
-              <textarea
-                className="code-area"
-                value={draft.docs}
-                placeholder="Document this request in Markdown…"
-                onChange={(e) => patch({ docs: e.target.value })}
-              />
-            )}
+            <LazyMarkdownEditor
+              value={draft.docs}
+              onChange={(docs) => patch({ docs })}
+              placeholder="Document this request in Markdown…"
+            />
           </div>
         )}
       </div>

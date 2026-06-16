@@ -61,6 +61,7 @@ plain folder of JSON and Markdown files you can commit, diff, and share.
 - [MCP server (for AI agents)](#mcp-server-for-ai-agents)
 - [Keyboard shortcuts](#keyboard-shortcuts)
 - [Stack](#stack)
+- [Contributing](#contributing)
 - [Releases](#releases)
 - [License](#license)
 
@@ -250,6 +251,12 @@ requests directly via `create_request` / `update_request`.)
   execution proxy with variable interpolation and a 30s timeout.
 - `client/` — React + Vite + TypeScript. No state library; talks to the
   server over a small typed API client (`client/src/api.ts`).
+
+## Contributing
+
+Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for how to set
+up the project, the branch/PR workflow, and our conventions. By participating you
+agree to our [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## Releases
 

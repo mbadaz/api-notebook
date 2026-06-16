@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { CookieJar } from 'tough-cookie';
+import { Cookie, CookieJar } from 'tough-cookie';
 
 /**
  * Per-workspace cookie jar, persisted machine-local in ~/.apinotebook/cookies/
@@ -68,9 +68,22 @@ export function storeSetCookies(
 ): void {
   for (const raw of setCookies) {
     try {
-      jar.setCookieSync(raw, url, { ignoreError: true });
+      jar.setCookieSync(raw, url);
     } catch {
-      // Skip cookies we can't parse or that don't match the URL.
+      // Strict storage rejected it — commonly a Domain attribute set to an IP
+      // or a host the spec disallows (e.g. local dev APIs on 127.0.0.1). Keep
+      // the cookie anyway as a host-only cookie for the requested host, which
+      // is the useful behavior for an API testing tool.
+      try {
+        const cookie = Cookie.parse(raw, { loose: true });
+        if (cookie) {
+          cookie.domain = null;
+          cookie.hostOnly = true;
+          jar.setCookieSync(cookie, url, { ignoreError: true });
+        }
+      } catch {
+        // Genuinely unparseable — skip it.
+      }
     }
   }
 }

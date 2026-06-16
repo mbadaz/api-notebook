@@ -8,6 +8,7 @@ import {
   convertCollection,
   convertEnvironment,
   detectPostmanKind,
+  hasScripts,
 } from './postmanImport.js';
 import * as wsfs from './workspaceFs.js';
 import { expandHome, HttpError } from './workspaceFs.js';
@@ -236,9 +237,10 @@ router.post(
       let requests = 0;
       for (const group of groups) {
         const collection = wsfs.createCollection(ws, group.name);
-        if (group.description) {
+        if (group.description || hasScripts(group.scripts)) {
           wsfs.updateCollection(ws, collection.id, {
             description: group.description,
+            scripts: hasScripts(group.scripts) ? group.scripts : undefined,
           });
         }
         for (const request of group.requests) {

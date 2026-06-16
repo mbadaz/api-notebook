@@ -5,6 +5,7 @@ import type {
   KeyValue,
   RequestBody,
   RequestType,
+  Scripts,
 } from './types.js';
 
 /**
@@ -70,16 +71,23 @@ interface PostmanRequest {
   description?: Described;
 }
 
+interface PostmanEvent {
+  listen?: string;
+  script?: { exec?: string[] | string };
+}
+
 interface PostmanItem {
   name?: string;
   description?: Described;
   item?: PostmanItem[];
   request?: PostmanRequest;
+  event?: PostmanEvent[];
 }
 
 interface PostmanCollection {
   info?: { name?: string; schema?: string };
   item?: PostmanItem[];
+  event?: PostmanEvent[];
 }
 
 interface PostmanEnvironment {
@@ -107,6 +115,47 @@ function describe(d: Described): string {
   if (!d) return '';
   if (typeof d === 'string') return d;
   return d.content ?? '';
+}
+
+const emptyScripts = (): Scripts => ({ preRequest: '', postResponse: '' });
+
+function execToString(event: PostmanEvent): string {
+  const exec = event.script?.exec;
+  if (Array.isArray(exec)) return exec.join('\n').trim();
+  if (typeof exec === 'string') return exec.trim();
+  return '';
+}
+
+/** Postman items carry pre-request/test scripts in an `event` array. */
+function eventsToScripts(events: PostmanEvent[] | undefined): Scripts {
+  const scripts = emptyScripts();
+  for (const event of events ?? []) {
+    const code = execToString(event);
+    if (!code) continue;
+    if (event.listen === 'prerequest') {
+      scripts.preRequest = joinScript(scripts.preRequest, code);
+    } else if (event.listen === 'test') {
+      scripts.postResponse = joinScript(scripts.postResponse, code);
+    }
+  }
+  return scripts;
+}
+
+function joinScript(a: string, b: string): string {
+  if (a && b) return `${a}\n\n${b}`;
+  return a || b;
+}
+
+/** Combines an ancestor's scripts with a descendant folder's scripts. */
+function combineScripts(parent: Scripts, child: Scripts): Scripts {
+  return {
+    preRequest: joinScript(parent.preRequest, child.preRequest),
+    postResponse: joinScript(parent.postResponse, child.postResponse),
+  };
+}
+
+export function hasScripts(scripts: Scripts): boolean {
+  return Boolean(scripts.preRequest || scripts.postResponse);
 }
 
 function paramValue(
@@ -244,14 +293,14 @@ function convertRequest(item: PostmanItem): ConvertedRequest {
     body,
     graphql,
     docs: describe(req.description),
-    // Postman pre-request/test scripts are intentionally not imported.
-    scripts: { preRequest: '', postResponse: '' },
+    scripts: eventsToScripts(item.event),
   };
 }
 
 export interface ConvertedCollectionGroup {
   name: string;
   description: string;
+  scripts: Scripts;
   requests: ConvertedRequest[];
 }
 
@@ -271,21 +320,32 @@ export function convertCollection(json: PostmanCollection): ConvertedCollection 
   const order: string[] = [];
   const groups = new Map<string, ConvertedCollectionGroup>();
 
-  const ensure = (name: string): ConvertedCollectionGroup => {
+  const ensure = (name: string, scripts: Scripts): ConvertedCollectionGroup => {
     let group = groups.get(name);
     if (!group) {
-      group = { name, description: '', requests: [] };
+      group = { name, description: '', scripts, requests: [] };
       groups.set(name, group);
       order.push(name);
     }
     return group;
   };
 
-  const walk = (items: PostmanItem[], pathParts: string[]): void => {
+  // Postman runs collection- and folder-level scripts around every request;
+  // since folders are flattened into collections, each collection inherits the
+  // combined scripts of its ancestor chain (collection root → folders).
+  const walk = (
+    items: PostmanItem[],
+    pathParts: string[],
+    parentScripts: Scripts
+  ): void => {
     for (const item of items) {
       if (Array.isArray(item.item)) {
         const childPath = [...pathParts, item.name ?? 'Folder'];
-        walk(item.item, childPath);
+        const childScripts = combineScripts(
+          parentScripts,
+          eventsToScripts(item.event)
+        );
+        walk(item.item, childPath, childScripts);
         const desc = describe(item.description);
         if (desc) {
           const key = childPath.join(' / ');
@@ -293,12 +353,12 @@ export function convertCollection(json: PostmanCollection): ConvertedCollection 
         }
       } else if (item.request) {
         const key = pathParts.length ? pathParts.join(' / ') : rootName;
-        ensure(key).requests.push(convertRequest(item));
+        ensure(key, parentScripts).requests.push(convertRequest(item));
       }
     }
   };
 
-  walk(json.item ?? [], []);
+  walk(json.item ?? [], [], eventsToScripts(json.event));
   return { name: rootName, groups: order.map((k) => groups.get(k)!) };
 }
 

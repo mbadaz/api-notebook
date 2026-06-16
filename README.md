@@ -115,14 +115,15 @@ What gets mapped:
   across raw JSON/text, `x-www-form-urlencoded`, multipart form-data
   (including file fields, by path), binary file, and GraphQL.
 - **Descriptions → Markdown docs** on the request.
+- **Scripts**: request pre-request/test scripts import into the request's
+  **Pre-request** / **Tests** tabs. Collection- and folder-level scripts import
+  too — because folders are flattened, each collection inherits the combined
+  scripts of its Postman ancestor chain, so they still run around every request
+  (see [Scripting](#scripting-pre-request--tests)). Scripts may use Postman APIs
+  this app doesn't implement; they import as-is and surface any errors at run time.
 - **Environments**: each `values` entry becomes a variable. Variables Postman
   marks as `secret` are imported as 🔒 secret — the name goes to the shared
   environment file and the value to the gitignored `<env>.local.json`.
-
-Postman **pre-request and test scripts are not imported automatically** yet,
-but API Notebook now has a compatible scripting engine (see
-[Scripting](#scripting-pre-request--tests) below) — paste them into the
-request's **Pre-request** / **Tests** tabs to use them.
 
 ## Scripting (pre-request & tests)
 

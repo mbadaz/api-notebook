@@ -5,6 +5,7 @@ import type {
   ExecutionResult,
   KeyValue,
   RequestType,
+  Scripts,
   WorkspaceMeta,
   WorkspaceTree,
 } from './types';
@@ -63,7 +64,7 @@ export const api = {
   updateCollection: (
     id: string,
     cid: string,
-    changes: { name?: string; description?: string }
+    changes: { name?: string; description?: string; scripts?: Scripts }
   ) =>
     http<null>(`/api/workspaces/${id}/collections/${cid}`, {
       method: 'PATCH',
@@ -122,8 +123,11 @@ export const api = {
       json({ path })
     ),
 
-  execute: (id: string, request: ApiRequest) =>
-    http<ExecutionResult>(`/api/workspaces/${id}/execute`, json({ request })),
+  execute: (id: string, request: ApiRequest, collectionId: string) =>
+    http<ExecutionResult>(
+      `/api/workspaces/${id}/execute`,
+      json({ request, collectionId })
+    ),
 };
 
 export type PostmanImportResult =

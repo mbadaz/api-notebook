@@ -17,6 +17,10 @@ plain folder of JSON and Markdown files you can commit, diff, and share.
   URLs, params, headers, auth and bodies, descriptions become Markdown docs,
   and environment variables import (Postman secrets land in the gitignored
   `.local.json`).
+- **Scripts**: Postman-compatible pre-request and post-response (test)
+  scripts with a `pm.*` API — set environment variables from a response,
+  tweak the outgoing request, and write `pm.test`/`pm.expect` assertions.
+  Works at the request and collection level.
 - **Request management**: hover menu on sidebar items with Rename, Copy,
   Paste (across collections), Duplicate, and Delete; unsaved changes
   highlight the Save button and prompt before navigating away.
@@ -115,8 +119,47 @@ What gets mapped:
   marks as `secret` are imported as 🔒 secret — the name goes to the shared
   environment file and the value to the gitignored `<env>.local.json`.
 
-Postman **pre-request and test scripts are not imported** — this app has no
-JavaScript execution engine, so that logic is dropped.
+Postman **pre-request and test scripts are not imported automatically** yet,
+but API Notebook now has a compatible scripting engine (see
+[Scripting](#scripting-pre-request--tests) below) — paste them into the
+request's **Pre-request** / **Tests** tabs to use them.
+
+## Scripting (pre-request & tests)
+
+Automate requests with Postman-compatible JavaScript. Each request has a
+**Pre-request** tab (runs before sending) and a **Tests** tab (runs after the
+response arrives); collections have the same two, which run around every
+request in the collection. The most common use is setting environment
+variables from a response:
+
+```js
+// Tests (post-response)
+const data = pm.response.json();
+pm.environment.set("bearer_token", data.token);   // later requests use {{bearer_token}}
+pm.test("login ok", () => pm.expect(pm.response.code).to.equal(200));
+```
+
+The `pm` API (a pragmatic subset of Postman's):
+
+- `pm.environment.get/set/unset/has/toObject` — **persisted** to the active
+  environment. If the variable is 🔒 secret the value goes to the gitignored
+  `<env>.local.json`; otherwise to the shared file. (Setting a *non-secret*
+  variable writes its value into the committable file — mark secrets as 🔒.)
+- `pm.variables.get/set` — a session scope for the current run only (not saved).
+- `pm.request` (pre-request) — read/modify `method`, `url`, `headers`
+  (`add`/`upsert`/`remove`/`get`) and `body.raw` before the request is sent.
+- `pm.response` (tests) — `code`, `status`, `responseTime`, `headers.get()`,
+  `.text()`, `.json()`.
+- `pm.test(name, fn)` and a small chai-like `pm.expect` (`.to.equal/eql`,
+  `.to.be.a/ok`, `.to.include`, `.to.have.property/status`, `.not`).
+- `console.log/info/warn/error` — captured and shown in the response's **Tests**
+  tab, alongside test results and the variables a run changed.
+
+Scripts run on the local server in a constrained `node:vm` sandbox (no
+`require`, `process`, `fetch` or timers) with a 2-second timeout. This keeps
+your own scripts contained on your own machine; it is **not** a hardened
+boundary, so review scripts in collections you import from elsewhere before
+running them.
 
 ## Keyboard shortcuts
 

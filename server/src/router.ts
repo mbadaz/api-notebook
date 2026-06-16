@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { Router, type Request, type Response } from 'express';
 import * as appData from './appData.js';
-import { executeRequest } from './execute.js';
+import { applyEnvChanges, runRequest } from './execute.js';
 import { pickFile, pickFolder } from './pickFolder.js';
 import {
   convertCollection,
@@ -137,6 +137,7 @@ router.patch(
     wsfs.updateCollection(ws, req.params.cid, {
       name: req.body.name,
       description: req.body.description,
+      scripts: req.body.scripts,
     });
     res.status(204).end();
   })
@@ -277,8 +278,25 @@ router.post(
     if (!request || typeof request.url !== 'string') {
       throw new HttpError(400, '"request" is required');
     }
+    const collectionId =
+      typeof req.body.collectionId === 'string' ? req.body.collectionId : null;
+    const collectionScripts = collectionId
+      ? wsfs.getCollectionScripts(ws, collectionId)
+      : { preRequest: '', postResponse: '' };
+
     const activeId = appData.getActiveEnvironmentId(ws.id);
     const env = activeId ? wsfs.getEnvironment(ws, activeId) : undefined;
-    res.json(await executeRequest(request, env));
+
+    const outcome = await runRequest(request, collectionScripts, env);
+
+    // Persist any environment variables the scripts set (secret-aware).
+    if (env && outcome.changedEnvKeys.length > 0) {
+      wsfs.updateEnvironment(ws, env.id, {
+        name: env.name,
+        variables: applyEnvChanges(env, outcome.envVars, outcome.changedEnvKeys),
+      });
+    }
+
+    res.json(outcome.result);
   })
 );

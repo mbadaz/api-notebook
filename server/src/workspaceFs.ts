@@ -151,8 +151,9 @@ function readRequest(
   const docs = fs.existsSync(docsFile)
     ? fs.readFileSync(docsFile, 'utf8')
     : '';
-  // Files written by older versions may predate newer body fields.
+  // Files written by older versions may predate newer body/script fields.
   const storedBody: Partial<ApiRequest['body']> = stored.body ?? {};
+  const storedScripts: Partial<ApiRequest['scripts']> = stored.scripts ?? {};
   return {
     ...stored,
     body: {
@@ -163,6 +164,7 @@ function readRequest(
       binaryPath: '',
       ...storedBody,
     },
+    scripts: { preRequest: '', postResponse: '', ...storedScripts },
     id,
     docs,
   };
@@ -170,14 +172,22 @@ function readRequest(
 
 function readCollection(ws: WorkspaceMeta, id: string): Collection {
   const dir = path.join(collectionsDir(ws), id);
-  const meta = readJson<{ name: string; description?: string }>(
-    path.join(dir, 'collection.json')
-  );
+  const meta = readJson<{
+    name: string;
+    description?: string;
+    scripts?: Partial<Collection['scripts']>;
+  }>(path.join(dir, 'collection.json'));
   const reqDir = path.join(dir, 'requests');
   const requests = listJsonFiles(reqDir).map((f) =>
     readRequest(reqDir, f.replace(/\.json$/, ''))
   );
-  return { id, name: meta.name, description: meta.description ?? '', requests };
+  return {
+    id,
+    name: meta.name,
+    description: meta.description ?? '',
+    scripts: { preRequest: '', postResponse: '', ...meta.scripts },
+    requests,
+  };
 }
 
 function localEnvFile(ws: WorkspaceMeta, id: string): string {
@@ -232,26 +242,43 @@ export function createCollection(ws: WorkspaceMeta, name: string): Collection {
   const taken = new Set(listDirs(collectionsDir(ws)));
   const id = uniqueSlug(slugify(name), taken);
   const dir = path.join(collectionsDir(ws), id);
+  const scripts = { preRequest: '', postResponse: '' };
   fs.mkdirSync(path.join(dir, 'requests'), { recursive: true });
-  writeJson(path.join(dir, 'collection.json'), { name, description: '' });
-  return { id, name, description: '', requests: [] };
+  writeJson(path.join(dir, 'collection.json'), { name, description: '', scripts });
+  return { id, name, description: '', scripts, requests: [] };
 }
 
 export function updateCollection(
   ws: WorkspaceMeta,
   id: string,
-  changes: { name?: string; description?: string }
+  changes: { name?: string; description?: string; scripts?: Collection['scripts'] }
 ): void {
   const file = path.join(collectionDir(ws, id), 'collection.json');
-  const meta = readJson<{ name: string; description?: string }>(file);
+  const meta = readJson<{
+    name: string;
+    description?: string;
+    scripts?: Collection['scripts'];
+  }>(file);
   writeJson(file, {
     name: changes.name ?? meta.name,
     description: changes.description ?? meta.description ?? '',
+    scripts: changes.scripts ??
+      meta.scripts ?? { preRequest: '', postResponse: '' },
   });
 }
 
 export function deleteCollection(ws: WorkspaceMeta, id: string): void {
   fs.rmSync(collectionDir(ws, id), { recursive: true, force: true });
+}
+
+export function getCollectionScripts(
+  ws: WorkspaceMeta,
+  id: string
+): Collection['scripts'] {
+  const file = path.join(collectionDir(ws, id), 'collection.json');
+  if (!fs.existsSync(file)) return { preRequest: '', postResponse: '' };
+  const meta = readJson<{ scripts?: Partial<Collection['scripts']> }>(file);
+  return { preRequest: '', postResponse: '', ...meta.scripts };
 }
 
 export function defaultRequest(
@@ -271,6 +298,7 @@ export function defaultRequest(
     body: { mode: 'none', content: '', form: [], formData: [], binaryPath: '' },
     graphql: { query: '', variables: '' },
     docs: '',
+    scripts: { preRequest: '', postResponse: '' },
   };
 }
 

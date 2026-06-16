@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { formatXml } from '../beautify';
 import { contentTypeLanguage, highlightCode } from '../highlight';
 import type { ExecutionResult } from '../types';
@@ -26,8 +26,14 @@ function formatSize(bytes: number): string {
 }
 
 export function ResponsePanel({ response, error, executing }: Props) {
-  const [tab, setTab] = useState<'body' | 'headers'>('body');
+  const [tab, setTab] = useState<'body' | 'headers' | 'script'>('body');
   const [view, setView] = useState<'pretty' | 'raw'>('pretty');
+
+  const script = response?.script;
+  // Avoid getting stuck on the Tests tab when a non-scripted response arrives.
+  useEffect(() => {
+    if (tab === 'script' && !script) setTab('body');
+  }, [script, tab]);
 
   const contentType = response?.headers['content-type'] ?? '';
   const language = contentTypeLanguage(contentType);
@@ -151,6 +157,19 @@ export function ResponsePanel({ response, error, executing }: Props) {
               >
                 Headers
               </button>
+              {script && (
+                <button
+                  className={tab === 'script' ? 'tab active' : 'tab'}
+                  onClick={() => setTab('script')}
+                >
+                  Tests
+                  {script.tests.length > 0 &&
+                    ` (${script.tests.filter((t) => t.passed).length}/${script.tests.length})`}
+                  {script.error || script.tests.some((t) => !t.passed)
+                    ? ' ⚠'
+                    : ''}
+                </button>
+              )}
             </div>
           </>
         )}
@@ -191,6 +210,43 @@ export function ResponsePanel({ response, error, executing }: Props) {
               <span className="kv-static-value">{value}</span>
             </div>
           ))}
+        </div>
+      )}
+      {response && !executing && tab === 'script' && script && (
+        <div className="script-results">
+          {script.error && <div className="response-error">{script.error}</div>}
+          {script.tests.length > 0 && (
+            <ul className="test-list">
+              {script.tests.map((t, i) => (
+                <li
+                  key={i}
+                  className={t.passed ? 'test-row test-pass' : 'test-row test-fail'}
+                >
+                  <span className="test-icon">{t.passed ? '✓' : '✗'}</span>
+                  <span className="test-name">{t.name}</span>
+                  {t.error && <span className="test-error">{t.error}</span>}
+                </li>
+              ))}
+            </ul>
+          )}
+          {script.variablesSet.length > 0 && (
+            <p className="muted">
+              Variables set:{' '}
+              {script.variablesSet.map((name, i) => (
+                <span key={name}>
+                  {i > 0 && ', '}
+                  <code>{name}</code>
+                </span>
+              ))}
+            </p>
+          )}
+          {script.logs.length > 0 && (
+            <pre className="script-console">{script.logs.join('\n')}</pre>
+          )}
+          {script.tests.length === 0 &&
+            script.logs.length === 0 &&
+            script.variablesSet.length === 0 &&
+            !script.error && <p className="muted">Scripts ran with no output.</p>}
         </div>
       )}
       {!response && !error && !executing && (

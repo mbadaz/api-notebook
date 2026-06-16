@@ -25,9 +25,10 @@ interface Props {
   onSaved: (request: ApiRequest) => void;
   onDelete: () => void;
   onDirtyChange: (dirty: boolean) => void;
+  onVariablesChanged: () => void;
 }
 
-type Tab = 'params' | 'headers' | 'auth' | 'body' | 'docs';
+type Tab = 'params' | 'headers' | 'auth' | 'body' | 'preReq' | 'tests' | 'docs';
 
 /**
  * Editing auth fields materializes sub-objects (bearer/basic/apiKey) that
@@ -63,6 +64,7 @@ export function RequestEditor({
   onSaved,
   onDelete,
   onDirtyChange,
+  onVariablesChanged,
 }: Props) {
   const [saved, setSaved] = useState(request);
   const [draft, setDraft] = useState(request);
@@ -116,7 +118,11 @@ export function RequestEditor({
     setExecuting(true);
     setExecError(null);
     try {
-      setResponse(await api.execute(workspaceId, draft));
+      const result = await api.execute(workspaceId, draft, collectionId);
+      setResponse(result);
+      // Scripts may have persisted environment variables; refresh so the
+      // sidebar, variable highlights and env editor reflect the new values.
+      if (result.script?.variablesSet.length) onVariablesChanged();
     } catch (err) {
       setResponse(null);
       setExecError(err instanceof Error ? err.message : String(err));
@@ -210,6 +216,8 @@ export function RequestEditor({
             ['headers', 'Headers'],
             ['auth', 'Auth'],
             ['body', isGraphql ? 'Query' : 'Body'],
+            ['preReq', 'Pre-request'],
+            ['tests', 'Tests'],
             ['docs', 'Docs'],
           ] as [Tab, string][]
         ).map(([value, label]) => (
@@ -415,6 +423,48 @@ export function RequestEditor({
             {draft.body.mode === 'none' && (
               <p className="muted">This request has no body.</p>
             )}
+          </div>
+        )}
+
+        {tab === 'preReq' && (
+          <div className="script-editor">
+            <p className="muted">
+              Runs before the request is sent. Use the{' '}
+              <code>pm</code> API, e.g.{' '}
+              <code>pm.environment.set("ts", Date.now())</code> or{' '}
+              <code>pm.request.headers.upsert(&#123;key:"X-Trace",value:"1"&#125;)</code>.
+            </p>
+            <textarea
+              className="code-area"
+              value={draft.scripts.preRequest}
+              placeholder="// pre-request script"
+              spellCheck={false}
+              onChange={(e) =>
+                patch({ scripts: { ...draft.scripts, preRequest: e.target.value } })
+              }
+            />
+          </div>
+        )}
+
+        {tab === 'tests' && (
+          <div className="script-editor">
+            <p className="muted">
+              Runs after the response arrives. Set variables from the response and
+              write tests, e.g.{' '}
+              <code>pm.environment.set("token", pm.response.json().token)</code>;{' '}
+              <code>pm.test("ok", () =&gt; pm.expect(pm.response.code).to.equal(200))</code>.
+            </p>
+            <textarea
+              className="code-area"
+              value={draft.scripts.postResponse}
+              placeholder="// post-response script (tests)"
+              spellCheck={false}
+              onChange={(e) =>
+                patch({
+                  scripts: { ...draft.scripts, postResponse: e.target.value },
+                })
+              }
+            />
           </div>
         )}
 

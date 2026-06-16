@@ -1,11 +1,19 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { guessMime } from './mime.js';
+import {
+  createRunState,
+  effectiveVars,
+  runScript,
+  type MutableRequest,
+  type ResponseView,
+} from './scripting.js';
 import type {
   ApiRequest,
   Environment,
   ExecutionResult,
   KeyValue,
+  Scripts,
 } from './types.js';
 import { expandHome, HttpError } from './workspaceFs.js';
 
@@ -20,7 +28,7 @@ export function interpolate(
   );
 }
 
-function envToVars(env: Environment | undefined): Record<string, string> {
+export function envToVars(env: Environment | undefined): Record<string, string> {
   const vars: Record<string, string> = {};
   for (const v of env?.variables ?? []) {
     // A secret without a local value is treated as undefined so the token
@@ -87,9 +95,9 @@ function resolveRequest(
 
 export async function executeRequest(
   request: ApiRequest,
-  env: Environment | undefined
+  vars: Record<string, string>
 ): Promise<ExecutionResult> {
-  const r = resolveRequest(request, envToVars(env));
+  const r = resolveRequest(request, vars);
 
   let url: URL;
   try {
@@ -251,4 +259,125 @@ export async function executeRequest(
     sizeBytes: buf.length,
     resolvedUrl: url.toString(),
   };
+}
+
+export interface RunOutcome {
+  result: ExecutionResult;
+  envVars: Record<string, string>;
+  changedEnvKeys: string[];
+}
+
+function hasAnyScript(collectionScripts: Scripts, request: ApiRequest): boolean {
+  return [
+    collectionScripts.preRequest,
+    collectionScripts.postResponse,
+    request.scripts.preRequest,
+    request.scripts.postResponse,
+  ].some((s) => s.trim());
+}
+
+/**
+ * Runs a request with its collection's and its own pre-request and
+ * post-response scripts around the fetch. Pre-request scripts can mutate the
+ * request and variables; post-response scripts read the response and set
+ * variables. Returns the execution result (with a `script` outcome) plus the
+ * final environment variables for the caller to persist.
+ */
+export async function runRequest(
+  request: ApiRequest,
+  collectionScripts: Scripts,
+  env: Environment | undefined
+): Promise<RunOutcome> {
+  const baseVars = envToVars(env);
+
+  // Without scripts, behave exactly as before — one interpolated fetch.
+  if (!hasAnyScript(collectionScripts, request)) {
+    const result = await executeRequest(request, baseVars);
+    return { result, envVars: baseVars, changedEnvKeys: [] };
+  }
+
+  const mutable: MutableRequest = {
+    method: request.method,
+    url: request.url,
+    headers: request.headers
+      .filter((h) => h.enabled && h.key)
+      .map((h) => ({ key: h.key, value: h.value })),
+    body: request.body.content,
+  };
+  const state = createRunState(baseVars, mutable, env !== undefined);
+  const errors: string[] = [];
+
+  for (const code of [collectionScripts.preRequest, request.scripts.preRequest]) {
+    const err = runScript(code, state, null);
+    if (err) errors.push(`Pre-request: ${err}`);
+  }
+
+  // Apply pre-request mutations onto the request we actually send.
+  const sendRequest: ApiRequest = {
+    ...request,
+    method: state.request.method as ApiRequest['method'],
+    url: state.request.url,
+    headers: state.request.headers.map((h) => ({
+      key: h.key,
+      value: h.value,
+      enabled: true,
+    })),
+    body: { ...request.body, content: state.request.body },
+  };
+
+  const result = await executeRequest(sendRequest, effectiveVars(state));
+
+  const responseView: ResponseView = {
+    code: result.status,
+    status: result.statusText,
+    responseTime: result.timeMs,
+    headers: result.headers,
+    text: result.bodyEncoding === 'text' ? result.body : '',
+  };
+  for (const code of [
+    collectionScripts.postResponse,
+    request.scripts.postResponse,
+  ]) {
+    const err = runScript(code, state, responseView);
+    if (err) errors.push(`Post-response: ${err}`);
+  }
+
+  result.script = {
+    logs: state.logs,
+    tests: state.tests,
+    variablesSet: [...state.changedEnvKeys],
+    error: errors.length ? errors.join('\n') : undefined,
+  };
+
+  return {
+    result,
+    envVars: state.envVars,
+    changedEnvKeys: [...state.changedEnvKeys],
+  };
+}
+
+/**
+ * Merges script-driven variable changes back into an environment's variable
+ * list, preserving each variable's secret flag (so secret values still land in
+ * the gitignored local file via updateEnvironment).
+ */
+export function applyEnvChanges(
+  env: Environment,
+  envVars: Record<string, string>,
+  changedKeys: string[]
+): KeyValue[] {
+  const changed = new Set(changedKeys);
+  const existing = new Set(env.variables.map((v) => v.key));
+  const variables = env.variables
+    // Drop variables a script unset.
+    .filter((v) => !(changed.has(v.key) && !Object.hasOwn(envVars, v.key)))
+    .map((v) =>
+      changed.has(v.key) ? { ...v, value: envVars[v.key], enabled: true } : v
+    );
+  for (const key of changedKeys) {
+    if (!existing.has(key) && Object.hasOwn(envVars, key)) {
+      variables.push({ key, value: envVars[key], enabled: true });
+    }
+  }
+  return variables;
 }

@@ -500,6 +500,7 @@ export default function App() {
             onSaved={() => loadTree(tree.meta.id, true)}
             onDelete={() => deleteRequestAction(collection.id, request)}
             onDirtyChange={handleDirtyChange}
+            onVariablesChanged={() => loadTree(tree.meta.id, true)}
           />
         );
       }

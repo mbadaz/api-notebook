@@ -244,6 +244,8 @@ function convertRequest(item: PostmanItem): ConvertedRequest {
     body,
     graphql,
     docs: describe(req.description),
+    // Postman pre-request/test scripts are intentionally not imported.
+    scripts: { preRequest: '', postResponse: '' },
   };
 }
 

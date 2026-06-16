@@ -52,6 +52,12 @@ export interface GraphQLBody {
   variables: string;
 }
 
+/** Postman-style automation scripts (JavaScript using the `pm` API). */
+export interface Scripts {
+  preRequest: string;
+  postResponse: string;
+}
+
 export interface ApiRequest {
   id: string;
   name: string;
@@ -64,12 +70,14 @@ export interface ApiRequest {
   body: RequestBody;
   graphql: GraphQLBody;
   docs: string;
+  scripts: Scripts;
 }
 
 export interface Collection {
   id: string;
   name: string;
   description: string;
+  scripts: Scripts;
   requests: ApiRequest[];
 }
 
@@ -92,6 +100,21 @@ export interface WorkspaceTree {
   activeEnvironmentId: string | null;
 }
 
+export interface ScriptTestResult {
+  name: string;
+  passed: boolean;
+  error?: string;
+}
+
+export interface ScriptOutcome {
+  logs: string[];
+  tests: ScriptTestResult[];
+  /** Names of environment variables the scripts created or changed. */
+  variablesSet: string[];
+  /** A script error (thrown outside a pm.test), if any. */
+  error?: string;
+}
+
 export interface ExecutionResult {
   status: number;
   statusText: string;
@@ -102,4 +125,6 @@ export interface ExecutionResult {
   timeMs: number;
   sizeBytes: number;
   resolvedUrl: string;
+  /** Present when pre-request or post-response scripts ran. */
+  script?: ScriptOutcome;
 }

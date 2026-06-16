@@ -291,5 +291,6 @@ export function parseCurl(command: string): Omit<ApiRequest, 'id'> {
     body: { mode, content, form, formData, binaryPath },
     graphql: { query: '', variables: '' },
     docs: '',
+    scripts: { preRequest: '', postResponse: '' },
   };
 }

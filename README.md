@@ -193,7 +193,7 @@ The server exposes a [Model Context Protocol](https://modelcontextprotocol.io)
 endpoint over Streamable HTTP at `http://localhost:3001/mcp`, so AI agents
 (Claude Code, Claude Desktop, etc.) can drive your workspaces. It runs on the
 same server as the app, so just start it (`npm run dev` or `npm start`) and add
-it to your agent:
+it to your favourite agent. For example:
 
 ```sh
 claude mcp add --transport http api-notebook http://localhost:3001/mcp

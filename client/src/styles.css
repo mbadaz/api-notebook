@@ -1032,6 +1032,82 @@ input[type='radio'] {
   margin-top: 6px;
 }
 
+/* ---------- cookie manager ---------- */
+
+.cookie-modal {
+  width: 680px;
+}
+
+.modal-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.modal-title-row h2 {
+  margin: 0;
+}
+
+.cookie-list {
+  margin-top: 10px;
+  max-height: 55vh;
+  overflow-y: auto;
+}
+
+.cookie-domain {
+  margin-bottom: 14px;
+}
+
+.cookie-domain-name {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+}
+
+.cookie-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 2px;
+  font-size: 0.86rem;
+}
+
+.cookie-key {
+  font-weight: 600;
+  min-width: 140px;
+  word-break: break-all;
+}
+
+.cookie-value {
+  flex: 1;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+}
+
+.cookie-flags {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: 0.76rem;
+}
+
+.cookie-flag {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0 6px;
+}
+
 /* ---------- misc ---------- */
 
 .muted {

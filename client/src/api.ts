@@ -128,7 +128,28 @@ export const api = {
       `/api/workspaces/${id}/execute`,
       json({ request, collectionId })
     ),
+
+  listCookies: (id: string) =>
+    http<StoredCookie[]>(`/api/workspaces/${id}/cookies`),
+
+  deleteCookie: (
+    id: string,
+    cookie: { domain: string; path: string; key: string }
+  ) => http<null>(`/api/workspaces/${id}/cookies/delete`, json(cookie)),
+
+  clearCookies: (id: string) =>
+    http<null>(`/api/workspaces/${id}/cookies`, { method: 'DELETE' }),
 };
+
+export interface StoredCookie {
+  domain: string;
+  path: string;
+  key: string;
+  value: string;
+  secure: boolean;
+  httpOnly: boolean;
+  expires: string | null;
+}
 
 export type PostmanImportResult =
   | { kind: 'collection'; collections: number; requests: number }

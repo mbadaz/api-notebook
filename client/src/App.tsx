@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from './api';
 import { CollectionEditor } from './components/CollectionEditor';
+import { CookieManager } from './components/CookieManager';
 import { EnvironmentEditor } from './components/EnvironmentEditor';
 import { PromptModal, type PromptConfig } from './components/PromptModal';
 import { RequestEditor } from './components/RequestEditor';
@@ -22,6 +23,7 @@ export default function App() {
   const [tree, setTree] = useState<WorkspaceTree | null>(null);
   const [selection, setSelection] = useState<Selection>(null);
   const [prompt, setPrompt] = useState<PromptConfig | null>(null);
+  const [showCookies, setShowCookies] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [clipboard, setClipboard] = useState<ApiRequest | null>(null);
   const [editorDirty, setEditorDirty] = useState(false);
@@ -587,6 +589,7 @@ export default function App() {
         environments={tree?.environments ?? []}
         activeEnvironmentId={tree?.activeEnvironmentId ?? null}
         onSelectEnvironment={selectEnvironment}
+        onShowCookies={() => setShowCookies(true)}
       />
       <VariablesContext.Provider value={variablesInfo}>
         <div className="app-body">
@@ -646,6 +649,12 @@ export default function App() {
         </div>
       </VariablesContext.Provider>
       {prompt && <PromptModal config={prompt} onClose={() => setPrompt(null)} />}
+      {showCookies && workspaceId && (
+        <CookieManager
+          workspaceId={workspaceId}
+          onClose={() => setShowCookies(false)}
+        />
+      )}
       {toast && (
         <div className="toast" onClick={() => setToast(null)}>
           {toast}

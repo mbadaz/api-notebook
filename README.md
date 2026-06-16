@@ -24,6 +24,10 @@ plain folder of JSON and Markdown files you can commit, diff, and share.
 - **Request management**: hover menu on sidebar items with Rename, Copy,
   Paste (across collections), Duplicate, and Delete; unsaved changes
   highlight the Save button and prompt before navigating away.
+- **Cookies**: an automatic per-workspace cookie jar captures `Set-Cookie`
+  from responses and attaches matching cookies to later requests (honoring
+  domain/path/expiry/secure); a manager lets you view and clear them, and
+  scripts can read them via `pm.cookies`.
 - **Auth helpers**: Bearer token, Basic auth, API key (header or query).
 - **Environments** (workspace-level) with `{{variable}}` interpolation in
   URLs, params, headers, auth fields, and bodies. The active environment is
@@ -151,6 +155,8 @@ The `pm` API (a pragmatic subset of Postman's):
   (`add`/`upsert`/`remove`/`get`) and `body.raw` before the request is sent.
 - `pm.response` (tests) — `code`, `status`, `responseTime`, `headers.get()`,
   `.text()`, `.json()`.
+- `pm.cookies` — `get(name)`, `has(name)`, `toObject()` for the request's
+  domain, read from the workspace cookie jar.
 - `pm.test(name, fn)` and a small chai-like `pm.expect` (`.to.equal/eql`,
   `.to.be.a/ok`, `.to.include`, `.to.have.property/status`, `.not`).
 - `console.log/info/warn/error` — captured and shown in the response's **Tests**
@@ -161,6 +167,22 @@ Scripts run on the local server in a constrained `node:vm` sandbox (no
 your own scripts contained on your own machine; it is **not** a hardened
 boundary, so review scripts in collections you import from elsewhere before
 running them.
+
+## Cookies
+
+Each workspace has an automatic cookie jar, like a browser. When a response
+sends `Set-Cookie`, the cookie is stored; on later requests the matching
+cookies are attached automatically (respecting domain, path, expiry and the
+`Secure` flag). A login request can set a session cookie that subsequent
+requests just use — no manual copying.
+
+Click **🍪 Cookies** in the top bar to view the jar grouped by domain and
+delete individual cookies or clear them all; a response shows a 🍪 count when
+it set any. Scripts can read cookies for the request's domain via
+`pm.cookies.get(name)` / `has(name)` / `toObject()`.
+
+Cookies are stored on your machine only (in `~/.apinotebook/`), never inside
+the workspace folder, so they are never committed to the repo.
 
 ## Keyboard shortcuts
 

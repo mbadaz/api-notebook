@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { Router, type Request, type Response } from 'express';
 import * as appData from './appData.js';
+import * as cookies from './cookies.js';
 import { applyEnvChanges, runRequest } from './execute.js';
 import { pickFile, pickFolder } from './pickFolder.js';
 import {
@@ -289,7 +290,9 @@ router.post(
     const activeId = appData.getActiveEnvironmentId(ws.id);
     const env = activeId ? wsfs.getEnvironment(ws, activeId) : undefined;
 
-    const outcome = await runRequest(request, collectionScripts, env);
+    const jar = cookies.loadJar(ws.id);
+    const outcome = await runRequest(request, collectionScripts, env, jar);
+    cookies.saveJar(ws.id, jar);
 
     // Persist any environment variables the scripts set (secret-aware).
     if (env && outcome.changedEnvKeys.length > 0) {
@@ -300,5 +303,35 @@ router.post(
     }
 
     res.json(outcome.result);
+  })
+);
+
+router.get(
+  '/workspaces/:id/cookies',
+  wrap((req, res) => {
+    const ws = getWorkspace(req.params.id);
+    res.json(cookies.listCookies(ws.id));
+  })
+);
+
+router.post(
+  '/workspaces/:id/cookies/delete',
+  wrap((req, res) => {
+    const ws = getWorkspace(req.params.id);
+    cookies.removeCookie(ws.id, {
+      domain: requireString(req.body.domain, 'domain'),
+      path: requireString(req.body.path, 'path'),
+      key: requireString(req.body.key, 'key'),
+    });
+    res.status(204).end();
+  })
+);
+
+router.delete(
+  '/workspaces/:id/cookies',
+  wrap((req, res) => {
+    const ws = getWorkspace(req.params.id);
+    cookies.clearCookies(ws.id);
+    res.status(204).end();
   })
 );

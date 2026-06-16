@@ -1,5 +1,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import type { CookieJar } from 'tough-cookie';
+import {
+  attachCookies,
+  cookieMap,
+  storeSetCookies,
+} from './cookies.js';
 import { guessMime } from './mime.js';
 import {
   createRunState,
@@ -95,7 +101,8 @@ function resolveRequest(
 
 export async function executeRequest(
   request: ApiRequest,
-  vars: Record<string, string>
+  vars: Record<string, string>,
+  jar?: CookieJar
 ): Promise<ExecutionResult> {
   const r = resolveRequest(request, vars);
 
@@ -214,6 +221,8 @@ export async function executeRequest(
     }
   }
 
+  if (jar) attachCookies(jar, url.toString(), headers);
+
   const started = performance.now();
   let response: Response;
   try {
@@ -232,10 +241,16 @@ export async function executeRequest(
   const buf = Buffer.from(await response.arrayBuffer());
   const timeMs = Math.round(performance.now() - started);
 
+  // getSetCookie() preserves each Set-Cookie separately; forEach would merge
+  // them into one comma-joined string and corrupt cookies with dates.
+  const setCookies = response.headers.getSetCookie();
+  if (jar) storeSetCookies(jar, url.toString(), setCookies);
+
   const responseHeaders: Record<string, string> = {};
   response.headers.forEach((value, key) => {
-    responseHeaders[key] = value;
+    if (key.toLowerCase() !== 'set-cookie') responseHeaders[key] = value;
   });
+  if (setCookies.length > 0) responseHeaders['set-cookie'] = setCookies.join('\n');
 
   // Keep valid UTF-8 as text; anything else (images, archives, PDFs…)
   // travels as base64 so it survives JSON transport unmangled.
@@ -286,13 +301,14 @@ function hasAnyScript(collectionScripts: Scripts, request: ApiRequest): boolean 
 export async function runRequest(
   request: ApiRequest,
   collectionScripts: Scripts,
-  env: Environment | undefined
+  env: Environment | undefined,
+  jar?: CookieJar
 ): Promise<RunOutcome> {
   const baseVars = envToVars(env);
 
   // Without scripts, behave exactly as before — one interpolated fetch.
   if (!hasAnyScript(collectionScripts, request)) {
-    const result = await executeRequest(request, baseVars);
+    const result = await executeRequest(request, baseVars, jar);
     return { result, envVars: baseVars, changedEnvKeys: [] };
   }
 
@@ -306,6 +322,9 @@ export async function runRequest(
   };
   const state = createRunState(baseVars, mutable, env !== undefined);
   const errors: string[] = [];
+
+  // Snapshot cookies the request would send, for pm.cookies in pre-request.
+  if (jar) state.cookies = cookieMap(jar, interpolate(mutable.url, baseVars));
 
   for (const code of [collectionScripts.preRequest, request.scripts.preRequest]) {
     const err = runScript(code, state, null);
@@ -325,7 +344,12 @@ export async function runRequest(
     body: { ...request.body, content: state.request.body },
   };
 
-  const result = await executeRequest(sendRequest, effectiveVars(state));
+  const result = await executeRequest(sendRequest, effectiveVars(state), jar);
+
+  // Refresh the cookie snapshot so post-response scripts see Set-Cookie values.
+  if (jar) {
+    state.cookies = cookieMap(jar, interpolate(sendRequest.url, effectiveVars(state)));
+  }
 
   const responseView: ResponseView = {
     code: result.status,

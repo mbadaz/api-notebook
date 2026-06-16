@@ -36,6 +36,8 @@ export function ResponsePanel({ response, error, executing }: Props) {
   }, [script, tab]);
 
   const contentType = response?.headers['content-type'] ?? '';
+  const setCookieHeader = response?.headers['set-cookie'];
+  const cookieCount = setCookieHeader ? setCookieHeader.split('\n').length : 0;
   const language = contentTypeLanguage(contentType);
   const isBinary = response?.bodyEncoding === 'base64';
   const isHtml = !isBinary && contentType.toLowerCase().includes('html');
@@ -115,6 +117,14 @@ export function ResponsePanel({ response, error, executing }: Props) {
             </span>
             <span className="muted">{response.timeMs} ms</span>
             <span className="muted">{formatSize(response.sizeBytes)}</span>
+            {cookieCount > 0 && (
+              <span
+                className="muted"
+                title={`${cookieCount} cookie(s) set — view in the Headers tab or the Cookies manager`}
+              >
+                🍪 {cookieCount}
+              </span>
+            )}
             <div className="spacer" />
             {tab === 'body' && (
               <>

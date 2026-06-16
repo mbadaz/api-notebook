@@ -34,6 +34,8 @@ export interface ScriptRunState {
   sessionVars: Record<string, string>;
   /** Env keys the scripts created, changed or removed. */
   changedEnvKeys: Set<string>;
+  /** Cookies the request's URL would send (read-only, for pm.cookies). */
+  cookies: Record<string, string>;
   request: MutableRequest;
   hasActiveEnv: boolean;
   logs: string[];
@@ -49,6 +51,7 @@ export function createRunState(
     envVars: { ...envVars },
     sessionVars: {},
     changedEnvKeys: new Set(),
+    cookies: {},
     request,
     hasActiveEnv,
     logs: [],
@@ -172,6 +175,12 @@ function buildPm(state: ScriptRunState, response: ResponseView | null): unknown 
       Object.hasOwn(state.sessionVars, key) || Object.hasOwn(state.envVars, key),
   };
 
+  const cookies = {
+    get: (name: string) => state.cookies[name],
+    has: (name: string) => Object.hasOwn(state.cookies, name),
+    toObject: () => ({ ...state.cookies }),
+  };
+
   const request = {
     get method() {
       return state.request.method;
@@ -227,6 +236,7 @@ function buildPm(state: ScriptRunState, response: ResponseView | null): unknown 
   return {
     environment,
     variables,
+    cookies,
     request,
     response: pmResponse,
     test: (name: string, fn: () => void) => {

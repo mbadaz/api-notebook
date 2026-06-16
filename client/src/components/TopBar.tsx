@@ -9,6 +9,7 @@ interface Props {
   environments: Environment[];
   activeEnvironmentId: string | null;
   onSelectEnvironment: (id: string | null) => void;
+  onShowCookies: () => void;
 }
 
 export function TopBar({
@@ -20,6 +21,7 @@ export function TopBar({
   environments,
   activeEnvironmentId,
   onSelectEnvironment,
+  onShowCookies,
 }: Props) {
   return (
     <header className="topbar">
@@ -44,6 +46,11 @@ export function TopBar({
         <option value="__open">⌂ Open existing folder…</option>
       </select>
       <div className="spacer" />
+      {currentWorkspaceId && (
+        <button className="btn btn-ghost" onClick={onShowCookies}>
+          🍪 Cookies
+        </button>
+      )}
       {currentWorkspaceId && (
         <label className="env-select-label">
           Environment

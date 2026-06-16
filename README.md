@@ -12,6 +12,11 @@ plain folder of JSON and Markdown files you can commit, diff, and share.
 - **cURL import/export**: paste a cURL command into a collection to create
   a request, or copy any request as a runnable cURL command with variables
   resolved.
+- **Postman import**: bring in a Postman collection or environment export
+  (Collection v2.1.0) — folders become collections, requests keep their
+  URLs, params, headers, auth and bodies, descriptions become Markdown docs,
+  and environment variables import (Postman secrets land in the gitignored
+  `.local.json`).
 - **Request management**: hover menu on sidebar items with Rename, Copy,
   Paste (across collections), Duplicate, and Delete; unsaved changes
   highlight the Save button and prompt before navigating away.
@@ -85,6 +90,33 @@ workspace `.gitignore` includes the rule automatically), so the repo shares
 the variable names while each teammate supplies their own values. A cloned
 workspace shows unfilled secrets with a "missing" warning, and their
 `{{tokens}}` highlight red until a local value is set.
+
+## Importing from Postman
+
+Export a collection or environment from Postman (Collection format
+**v2.1.0**), then in API Notebook click the **⤓** button in the sidebar's
+**Collections** heading and pick the `.json` file. The file type is detected
+automatically, and everything imports into the **current workspace**, so open
+or create the workspace you want first. Run the import once per file to bring
+in a collection and each of its environments.
+
+What gets mapped:
+
+- **Folders → collections.** Nested folders are flattened into collections
+  named by their path (`Parent / Child`), since collections are a single
+  level here. Requests sitting at the collection root go into a collection
+  named after the Postman collection.
+- **Requests** keep their method, URL (the query string is split into the
+  Params editor), headers, and auth (Bearer, Basic, API key). Bodies map
+  across raw JSON/text, `x-www-form-urlencoded`, multipart form-data
+  (including file fields, by path), binary file, and GraphQL.
+- **Descriptions → Markdown docs** on the request.
+- **Environments**: each `values` entry becomes a variable. Variables Postman
+  marks as `secret` are imported as 🔒 secret — the name goes to the shared
+  environment file and the value to the gitignored `<env>.local.json`.
+
+Postman **pre-request and test scripts are not imported** — this app has no
+JavaScript execution engine, so that logic is dropped.
 
 ## Keyboard shortcuts
 

@@ -116,6 +116,16 @@ export const api = {
       method: 'DELETE',
     }),
 
+  importPostman: (id: string, path: string) =>
+    http<PostmanImportResult>(
+      `/api/workspaces/${id}/import/postman`,
+      json({ path })
+    ),
+
   execute: (id: string, request: ApiRequest) =>
     http<ExecutionResult>(`/api/workspaces/${id}/execute`, json({ request })),
 };
+
+export type PostmanImportResult =
+  | { kind: 'collection'; collections: number; requests: number }
+  | { kind: 'environment'; name: string; variables: number };

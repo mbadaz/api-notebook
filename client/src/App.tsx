@@ -358,6 +358,31 @@ export default function App() {
     });
   }
 
+  async function importPostman() {
+    if (!workspaceId) return;
+    try {
+      const picked = await api.pickFile(
+        'Choose a Postman collection or environment export'
+      );
+      if (!picked.path) return;
+      const result = await api.importPostman(workspaceId, picked.path);
+      await loadTree(workspaceId, true);
+      setToast(
+        result.kind === 'collection'
+          ? `Imported ${result.requests} request${
+              result.requests === 1 ? '' : 's'
+            } into ${result.collections} collection${
+              result.collections === 1 ? '' : 's'
+            }.`
+          : `Imported environment "${result.name}" with ${result.variables} variable${
+              result.variables === 1 ? '' : 's'
+            }.`
+      );
+    } catch (err) {
+      showError(err);
+    }
+  }
+
   async function copyRequestInto(
     collectionId: string,
     source: ApiRequest,
@@ -607,6 +632,7 @@ export default function App() {
                 onSelect={selectGuarded}
                 onNewCollection={promptNewCollection}
                 onNewEnvironment={promptNewEnvironment}
+                onImportPostman={importPostman}
               />
               <div
                 className="sidebar-resizer"

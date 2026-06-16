@@ -27,6 +27,7 @@ interface Props {
   onSelect: (selection: Selection) => void;
   onNewCollection: () => void;
   onNewEnvironment: () => void;
+  onImportPostman: () => void;
 }
 
 interface MenuState {
@@ -54,6 +55,7 @@ export function Sidebar({
   onSelect,
   onNewCollection,
   onNewEnvironment,
+  onImportPostman,
 }: Props) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [menu, setMenu] = useState<MenuState | null>(null);
@@ -99,13 +101,22 @@ export function Sidebar({
       <div className="sidebar-section">
         <div className="sidebar-heading">
           <span>Collections</span>
-          <button
-            className="icon-btn"
-            title="New collection"
-            onClick={onNewCollection}
-          >
-            +
-          </button>
+          <span className="sidebar-heading-actions">
+            <button
+              className="icon-btn"
+              title="Import a Postman collection or environment export"
+              onClick={onImportPostman}
+            >
+              ⤓
+            </button>
+            <button
+              className="icon-btn"
+              title="New collection"
+              onClick={onNewCollection}
+            >
+              +
+            </button>
+          </span>
         </div>
         {tree.collections.length === 0 && (
           <p className="muted sidebar-empty">No collections yet.</p>

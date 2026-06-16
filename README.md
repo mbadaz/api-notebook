@@ -3,6 +3,8 @@
 A local-first, web-based and Git-friendly API client — like Postman, but every workspace is a
 plain folder of JSON and Markdown files you can commit, diff, and share.
 
+![API Notebook — a request with its variable-aware URL and a syntax-highlighted JSON response](docs/screenshot.png)
+
 - **HTTP & GraphQL requests** with params, headers, body modes (JSON, text,
   form-urlencoded, multipart form-data with file fields, binary file) and
   GraphQL query/variables editors. File bodies are referenced by path and

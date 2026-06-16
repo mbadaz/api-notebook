@@ -42,6 +42,9 @@ plain folder of JSON and Markdown files you can commit, diff, and share.
   system folder picker (or by typing a path) — collaborate by making a
   workspace a Git repo and pushing it to GitHub. On Linux the picker uses
   `zenity` or `kdialog` if installed.
+- **MCP server**: AI agents can connect over MCP to query, build, run, and
+  manage workspaces — collections, requests, environments, execution, and
+  Postman import — via a Streamable-HTTP endpoint on the same server.
 - Requests are executed by the local Node server (no CORS problems), which
   returns status, headers, body, timing, and size.
 
@@ -183,6 +186,41 @@ it set any. Scripts can read cookies for the request's domain via
 
 Cookies are stored on your machine only (in `~/.apinotebook/`), never inside
 the workspace folder, so they are never committed to the repo.
+
+## MCP server (for AI agents)
+
+The server exposes a [Model Context Protocol](https://modelcontextprotocol.io)
+endpoint over Streamable HTTP at `http://localhost:3001/mcp`, so AI agents
+(Claude Code, Claude Desktop, etc.) can drive your workspaces. It runs on the
+same server as the app, so just start it (`npm run dev` or `npm start`) and add
+it to your agent:
+
+```sh
+claude mcp add --transport http api-notebook http://localhost:3001/mcp
+```
+
+Tools are **multi-workspace** — each takes a `workspaceId` (call
+`list_workspaces` first to discover them; create new workspaces from the app UI,
+since that needs a folder picker). The tool set covers full management:
+
+- **Query**: `list_workspaces`, `get_workspace_tree`, `get_collection`,
+  `get_request`, `get_environment`, `list_cookies`.
+- **Build & edit**: `create_collection`, `update_collection`, `create_request`,
+  `update_request` (only the fields you pass change; use `{{variable}}` for
+  interpolation), `create_environment`, `update_environment`,
+  `set_active_environment`, `set_variable`.
+- **Run**: `execute_request` — sends a saved request through the proxy with
+  variable interpolation, pre-request/test scripts, and the cookie jar, and
+  returns the response plus script results and test outcomes.
+- **Import**: `import_postman` (collection or environment, by file path).
+- **Destructive** (flagged to the agent): `delete_request`, `delete_collection`,
+  `clear_cookies`. These are guarded — calling one without `confirm: true`
+  returns a summary of exactly what would be deleted and does nothing; the agent
+  must surface that and re-call with `confirm: true` once you approve.
+
+The endpoint is unauthenticated, matching the local REST API — it's meant for
+`localhost` use only. (cURL-string import isn't an MCP tool; agents create
+requests directly via `create_request` / `update_request`.)
 
 ## Keyboard shortcuts
 

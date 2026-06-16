@@ -281,6 +281,22 @@ export function getCollectionScripts(
   return { preRequest: '', postResponse: '', ...meta.scripts };
 }
 
+export function getCollection(ws: WorkspaceMeta, id: string): Collection {
+  return readCollection(ws, id);
+}
+
+export function getRequest(
+  ws: WorkspaceMeta,
+  collectionId: string,
+  id: string
+): ApiRequest {
+  const dir = requestsDir(ws, collectionId);
+  if (!fs.existsSync(path.join(dir, `${id}.json`))) {
+    throw new HttpError(404, `Request "${id}" not found`);
+  }
+  return readRequest(dir, id);
+}
+
 export function defaultRequest(
   id: string,
   name: string,

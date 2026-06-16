@@ -7,6 +7,7 @@ import express, {
   type Request,
   type Response,
 } from 'express';
+import { registerMcp } from './mcp.js';
 import { router } from './router.js';
 import { HttpError } from './workspaceFs.js';
 
@@ -16,6 +17,9 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: '20mb' }));
 app.use('/api', router);
+
+// MCP endpoint for AI agents (registered before the client catch-all).
+registerMcp(app);
 
 // In production, serve the built client from the same server.
 const clientDist = path.resolve(

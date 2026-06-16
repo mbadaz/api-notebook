@@ -61,6 +61,8 @@ plain folder of JSON and Markdown files you can commit, diff, and share.
 - [MCP server (for AI agents)](#mcp-server-for-ai-agents)
 - [Keyboard shortcuts](#keyboard-shortcuts)
 - [Stack](#stack)
+- [Releases](#releases)
+- [License](#license)
 
 ## Getting started
 
@@ -248,3 +250,24 @@ requests directly via `create_request` / `update_request`.)
   execution proxy with variable interpolation and a 30s timeout.
 - `client/` — React + Vite + TypeScript. No state library; talks to the
   server over a small typed API client (`client/src/api.ts`).
+
+## Releases
+
+API Notebook is released as source — each version is a Git tag and a
+[GitHub Release](https://github.com/mbadaz/api-notebook/releases). The whole app
+shares one [SemVer](https://semver.org) version (root, `client`, and `server` in
+lockstep). See [CHANGELOG.md](CHANGELOG.md) for what changed and
+[RELEASING.md](RELEASING.md) for the release process.
+
+To run a specific release:
+
+```sh
+git fetch --tags
+git checkout vX.Y.Z
+npm install && npm run build
+npm start          # http://localhost:3001
+```
+
+## License
+
+[MIT](LICENSE) © Tapiwa Muzira

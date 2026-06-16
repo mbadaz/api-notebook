@@ -48,6 +48,18 @@ plain folder of JSON and Markdown files you can commit, diff, and share.
 - Requests are executed by the local Node server (no CORS problems), which
   returns status, headers, body, timing, and size.
 
+## Contents
+
+- [Getting started](#getting-started)
+- [Workspace layout on disk](#workspace-layout-on-disk)
+- [Collaborating via Git](#collaborating-via-git)
+- [Importing from Postman](#importing-from-postman)
+- [Scripting (pre-request & tests)](#scripting-pre-request--tests)
+- [Cookies](#cookies)
+- [MCP server (for AI agents)](#mcp-server-for-ai-agents)
+- [Keyboard shortcuts](#keyboard-shortcuts)
+- [Stack](#stack)
+
 ## Getting started
 
 ```sh

@@ -235,6 +235,7 @@ function readRequest(
   const storedGraphql: Partial<ApiRequest['graphql']> = stored.graphql ?? {};
   const storedWebsocket: Partial<ApiRequest['websocket']> = stored.websocket ?? {};
   const storedSocketio: Partial<ApiRequest['socketio']> = stored.socketio ?? {};
+  const storedMcp: Partial<ApiRequest['mcp']> = stored.mcp ?? {};
   return {
     ...stored,
     body: {
@@ -257,6 +258,7 @@ function readRequest(
       listenEvents: [],
       ...storedSocketio,
     },
+    mcp: { url: '', ...storedMcp },
     id,
     docs,
   };
@@ -517,6 +519,7 @@ export function defaultRequest(
     graphql: { query: '', variables: '' },
     websocket: { url: '', subprotocols: '', messages: [] },
     socketio: { url: '', path: '', auth: '', query: [], emitEvents: [], listenEvents: [] },
+    mcp: { url: '' },
     docs: '',
     scripts: { preRequest: '', postResponse: '' },
   };

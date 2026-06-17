@@ -8,6 +8,7 @@ import type { ApiRequest } from './types.js';
 import type { DriverContext, Emit, LiveDriver } from './live/driver.js';
 import { createWsDriver } from './live/wsDriver.js';
 import { createSocketioDriver } from './live/socketioDriver.js';
+import { createMcpDriver } from './live/mcpDriver.js';
 
 /**
  * The live channel: a single browser WebSocket (at /live) multiplexes many
@@ -57,6 +58,8 @@ function driverFor(type: ApiRequest['type'], ctx: DriverContext): LiveDriver {
       return createWsDriver(ctx);
     case 'socketio':
       return createSocketioDriver(ctx);
+    case 'mcp':
+      return createMcpDriver(ctx);
     default:
       throw new Error(`Protocol "${type}" is not supported on the live channel`);
   }

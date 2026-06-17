@@ -10,6 +10,7 @@ import { TopBar } from './components/TopBar';
 import { parseCurl } from './curl';
 import type { Selection } from './selection';
 import { ConnectionEditor } from './components/ConnectionEditor';
+import { McpEditor } from './components/McpEditor';
 import type {
   ApiRequest,
   Collection,
@@ -280,11 +281,12 @@ export default function App() {
             { value: 'graphql', label: 'GraphQL' },
             { value: 'websocket', label: 'WebSocket' },
             { value: 'socketio', label: 'Socket.IO' },
+            { value: 'mcp', label: 'MCP (HTTP)' },
           ],
         },
       ],
       onSubmit: async (values) => {
-        const allowed: RequestType[] = ['http', 'graphql', 'websocket', 'socketio'];
+        const allowed: RequestType[] = ['http', 'graphql', 'websocket', 'socketio', 'mcp'];
         const type = (allowed as string[]).includes(values.type)
           ? (values.type as RequestType)
           : 'http';
@@ -673,6 +675,22 @@ export default function App() {
       const request = findRequest(collectionId, folderPath, requestId);
       if (collection && request) {
         const key = `${collectionId}/${folderPath.join('/')}/${request.id}`;
+        if (request.type === 'mcp') {
+          return (
+            <McpEditor
+              key={key}
+              workspaceId={tree.meta.id}
+              collectionId={collectionId}
+              folderPath={folderPath}
+              request={request}
+              onSaved={() => loadTree(tree.meta.id, true)}
+              onDelete={() =>
+                deleteRequestAction(collectionId, folderPath, request)
+              }
+              onDirtyChange={handleDirtyChange}
+            />
+          );
+        }
         if (request.type === 'websocket' || request.type === 'socketio') {
           return (
             <ConnectionEditor

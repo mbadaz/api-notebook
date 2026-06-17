@@ -163,6 +163,19 @@ describe('collections & requests (round-trip)', () => {
     expect(read.socketio.listenEvents).toEqual(['chat', 'pong']);
   });
 
+  it('persists an mcp request with its url', () => {
+    const col = wsfs.createCollection(ws, 'MCP');
+    const created = wsfs.createRequest(ws, col.id, [], 'Agent', 'mcp');
+    expect(created.mcp).toEqual({ url: '' });
+    wsfs.updateRequest(ws, col.id, [], created.id, {
+      ...created,
+      mcp: { url: 'https://mcp.example.com/mcp' },
+    });
+    const read = wsfs.getRequest(ws, col.id, [], created.id);
+    expect(read.type).toBe('mcp');
+    expect(read.mcp.url).toBe('https://mcp.example.com/mcp');
+  });
+
   it('back-fills missing fields and reads a legacy requests/ subdir', () => {
     const col = wsfs.createCollection(ws, 'Old');
     // Pre-folders workspaces stored requests in a legacy requests/ subdir.

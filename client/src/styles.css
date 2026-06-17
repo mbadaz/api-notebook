@@ -217,6 +217,7 @@ pre,
 .method-GQL { color: var(--pink); }
 .method-WS { color: var(--blue); }
 .method-IO { color: var(--green); }
+.method-MCP { color: var(--yellow); }
 
 /* ---------- main pane ---------- */
 
@@ -298,6 +299,7 @@ pre,
 .type-folder { background: #2a3340; color: var(--blue); }
 .type-websocket { background: #24323b; color: var(--blue); }
 .type-socketio { background: #243b2c; color: var(--green); }
+.type-mcp { background: #3b3324; color: var(--yellow); }
 
 /* ----- live connection (WebSocket/Socket.IO/MCP) ----- */
 .conn-status {
@@ -363,6 +365,51 @@ pre,
   user-select: none;
   width: fit-content;
 }
+
+/* ----- MCP editor ----- */
+.mcp-content { overflow: auto; }
+.mcp-tools { display: flex; gap: 16px; align-items: flex-start; }
+.mcp-tool-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 160px;
+  max-width: 220px;
+}
+.mcp-tool {
+  text-align: left;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-elev);
+  color: var(--text);
+  cursor: pointer;
+}
+.mcp-tool.selected { border-color: var(--blue); color: var(--blue); }
+.mcp-tool-detail { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+.mcp-tool-name { margin: 0; font-size: 1em; }
+
+.schema-form { display: flex; flex-direction: column; gap: 12px; }
+.schema-field { display: flex; flex-direction: column; gap: 4px; }
+.required-mark { color: var(--red); }
+.field-hint { color: var(--text-muted); font-weight: normal; }
+.checkbox-label { display: flex; gap: 6px; align-items: center; cursor: pointer; }
+
+.mcp-result {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 8px 10px;
+  background: var(--bg-elev);
+}
+.mcp-result-error { border-color: var(--red); }
+.mcp-result-head {
+  font-size: 0.8em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+.mcp-result-error .mcp-result-head { color: var(--red); }
+.mcp-result-text { margin: 0; white-space: pre-wrap; word-break: break-word; }
 .composer-actions {
   display: flex;
   flex-direction: column;

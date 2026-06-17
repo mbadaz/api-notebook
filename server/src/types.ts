@@ -1,4 +1,4 @@
-export type RequestType = 'http' | 'graphql' | 'websocket' | 'socketio';
+export type RequestType = 'http' | 'graphql' | 'websocket' | 'socketio' | 'mcp';
 
 export type HttpMethod =
   | 'GET'
@@ -81,6 +81,11 @@ export interface SocketIOConfig {
   listenEvents: string[];
 }
 
+/** MCP client config (Streamable HTTP transport; reuses headers + auth). */
+export interface McpConfig {
+  url: string;
+}
+
 /** Postman-style automation scripts (JavaScript using the `pm` API). */
 export interface Scripts {
   preRequest: string;
@@ -100,6 +105,7 @@ export interface ApiRequest {
   graphql: GraphQLBody;
   websocket: WebSocketConfig;
   socketio: SocketIOConfig;
+  mcp: McpConfig;
   docs: string;
   scripts: Scripts;
 }

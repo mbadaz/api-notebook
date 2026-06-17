@@ -70,6 +70,7 @@ function badgeLabel(request: ApiRequest): string {
   if (request.type === 'graphql') return 'GQL';
   if (request.type === 'websocket') return 'WS';
   if (request.type === 'socketio') return 'IO';
+  if (request.type === 'mcp') return 'MCP';
   return request.method;
 }
 
@@ -77,6 +78,7 @@ function badgeClass(request: ApiRequest): string {
   if (request.type === 'graphql') return 'method-GQL';
   if (request.type === 'websocket') return 'method-WS';
   if (request.type === 'socketio') return 'method-IO';
+  if (request.type === 'mcp') return 'method-MCP';
   return `method-${request.method}`;
 }
 

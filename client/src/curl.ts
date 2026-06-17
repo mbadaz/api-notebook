@@ -295,6 +295,7 @@ export function parseCurl(command: string): Omit<ApiRequest, 'id'> {
     graphql: { query: '', variables: '' },
     websocket: { url: '', subprotocols: '', messages: [] },
     socketio: { url: '', path: '', auth: '', query: [], emitEvents: [], listenEvents: [] },
+    mcp: { url: '' },
     docs: '',
     scripts: { preRequest: '', postResponse: '' },
   };

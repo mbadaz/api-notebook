@@ -20,6 +20,10 @@ See [RELEASING.md](RELEASING.md) for the release process.
   payload, query parameters, and an events filter), emit named events with JSON
   arguments, and watch incoming events in the live log, with reusable saved
   emits.
+- **MCP requests**: connect to an external MCP server over Streamable HTTP
+  (routed through the server, reusing headers and auth), browse its tools, fill
+  in a tool's arguments via a form generated from its JSON Schema, call it, and
+  view the result. STDIO transport is not supported yet.
 - **Folders** inside collections, nestable to any depth (Postman-style).
   Folders carry their own description and pre-request/test scripts, which run in
   the execution chain (collection → folder(s) → request). Postman imports now

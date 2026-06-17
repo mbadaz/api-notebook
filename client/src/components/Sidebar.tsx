@@ -37,7 +37,8 @@ interface Props {
   onSelect: (selection: Selection) => void;
   onNewCollection: () => void;
   onNewEnvironment: () => void;
-  onImportPostman: () => void;
+  onImportFile: () => void;
+  onImportFolder: () => void;
 }
 
 type DragItem =
@@ -79,10 +80,12 @@ export function Sidebar({
   onSelect,
   onNewCollection,
   onNewEnvironment,
-  onImportPostman,
+  onImportFile,
+  onImportFolder,
 }: Props) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [menu, setMenu] = useState<MenuState | null>(null);
+  const [importMenu, setImportMenu] = useState<{ x: number; y: number } | null>(null);
   const [drag, setDrag] = useState<DragItem | null>(null);
   const [dropKey, setDropKey] = useState<string | null>(null);
 
@@ -355,8 +358,11 @@ export function Sidebar({
           <span className="sidebar-heading-actions">
             <button
               className="icon-btn"
-              title="Import a Postman collection or environment export"
-              onClick={onImportPostman}
+              title="Import Postman exports"
+              onClick={(e) => {
+                const rect = e.currentTarget.getBoundingClientRect();
+                setImportMenu({ x: rect.right, y: rect.bottom + 2 });
+              }}
             >
               ⤓
             </button>
@@ -438,6 +444,38 @@ export function Sidebar({
                 {item.label}
               </button>
             ))}
+          </div>
+        </>
+      )}
+
+      {importMenu && (
+        <>
+          <div className="ctx-backdrop" onMouseDown={() => setImportMenu(null)} />
+          <div
+            className="ctx-menu"
+            style={{
+              top: importMenu.y,
+              left: Math.min(importMenu.x, window.innerWidth - 190),
+            }}
+          >
+            <button
+              className="ctx-item"
+              onClick={() => {
+                setImportMenu(null);
+                onImportFile();
+              }}
+            >
+              Import file…
+            </button>
+            <button
+              className="ctx-item"
+              onClick={() => {
+                setImportMenu(null);
+                onImportFolder();
+              }}
+            >
+              Import folder…
+            </button>
           </div>
         </>
       )}

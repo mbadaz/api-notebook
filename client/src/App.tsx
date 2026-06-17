@@ -461,6 +461,36 @@ export default function App() {
     }
   }
 
+  async function importPostmanFolder() {
+    if (!workspaceId) return;
+    try {
+      const picked = await api.pickFolder(
+        'Choose a folder of Postman exports to import'
+      );
+      if (!picked.path) return;
+      const r = await api.importPostmanDir(workspaceId, picked.path);
+      await loadTree(workspaceId, true);
+      if (r.collections === 0 && r.environments === 0) {
+        setToast(
+          r.files === 0
+            ? 'No JSON files found in that folder.'
+            : `No Postman exports found (skipped ${r.skipped} file${r.skipped === 1 ? '' : 's'}).`
+        );
+        return;
+      }
+      const parts: string[] = [];
+      if (r.collections)
+        parts.push(`${r.collections} collection${r.collections === 1 ? '' : 's'} (${r.requests} request${r.requests === 1 ? '' : 's'})`);
+      if (r.environments)
+        parts.push(`${r.environments} environment${r.environments === 1 ? '' : 's'}`);
+      setToast(
+        `Imported ${parts.join(' and ')}${r.skipped ? `; skipped ${r.skipped}` : ''}.`
+      );
+    } catch (err) {
+      showError(err);
+    }
+  }
+
   async function copyRequestInto(
     collectionId: string,
     folderPath: string[],
@@ -809,7 +839,8 @@ export default function App() {
                 onSelect={selectGuarded}
                 onNewCollection={promptNewCollection}
                 onNewEnvironment={promptNewEnvironment}
-                onImportPostman={importPostman}
+                onImportFile={importPostman}
+                onImportFolder={importPostmanFolder}
               />
               <div
                 className="sidebar-resizer"

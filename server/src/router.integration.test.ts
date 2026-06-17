@@ -282,3 +282,75 @@ describe('folder endpoints', () => {
     expect(imported.requests.map((r: { name: string }) => r.name)).toEqual(['Root']);
   });
 });
+
+describe('batch import (folder)', () => {
+  const SCHEMA =
+    'https://schema.getpostman.com/json/collection/v2.1.0/collection.json';
+  let wsId: string;
+  let importDir: string;
+
+  beforeAll(async () => {
+    const wd = fs.mkdtempSync(path.join(os.tmpdir(), 'apinb-batchws-'));
+    const ws = await request(app)
+      .post('/api/workspaces')
+      .send({ name: 'Batch WS', path: wd })
+      .expect(201);
+    wsId = ws.body.id;
+
+    importDir = fs.mkdtempSync(path.join(os.tmpdir(), 'apinb-batch-'));
+    fs.writeFileSync(
+      path.join(importDir, 'col1.json'),
+      JSON.stringify({
+        info: { name: 'One', schema: SCHEMA },
+        item: [{ name: 'A', request: { method: 'GET', url: { raw: 'http://x/a' } } }],
+      })
+    );
+    fs.writeFileSync(
+      path.join(importDir, 'env.json'),
+      JSON.stringify({
+        name: 'dev',
+        _postman_variable_scope: 'environment',
+        values: [{ key: 'base', value: 'http://x', enabled: true }],
+      })
+    );
+    // Not a Postman export — should be skipped.
+    fs.writeFileSync(path.join(importDir, 'notes.json'), JSON.stringify({ hello: 'world' }));
+    // A non-JSON file — should be ignored entirely.
+    fs.writeFileSync(path.join(importDir, 'README.md'), '# ignore me');
+    // A nested export — recursion should pick it up.
+    const sub = path.join(importDir, 'nested');
+    fs.mkdirSync(sub);
+    fs.writeFileSync(
+      path.join(sub, 'col2.json'),
+      JSON.stringify({
+        info: { name: 'Two', schema: SCHEMA },
+        item: [{ name: 'B', request: { method: 'GET', url: { raw: 'http://x/b' } } }],
+      })
+    );
+  });
+
+  afterAll(() => fs.rmSync(importDir, { recursive: true, force: true }));
+
+  it('imports every recognised export recursively and reports counts', async () => {
+    const res = await request(app)
+      .post(`/api/workspaces/${wsId}/import/postman-dir`)
+      .send({ path: importDir })
+      .expect(200);
+    expect(res.body).toMatchObject({
+      kind: 'batch',
+      files: 4, // col1, env, notes, nested/col2 (README.md is not .json)
+      collections: 2,
+      requests: 2,
+      environments: 1,
+      variables: 1,
+      skipped: 1, // notes.json
+    });
+
+    const tree = await request(app).get(`/api/workspaces/${wsId}`).expect(200);
+    expect(tree.body.collections.map((c: { name: string }) => c.name).sort()).toEqual([
+      'One',
+      'Two',
+    ]);
+    expect(tree.body.environments.map((e: { name: string }) => e.name)).toContain('dev');
+  });
+});

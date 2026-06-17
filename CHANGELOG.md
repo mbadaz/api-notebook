@@ -18,6 +18,10 @@ See [RELEASING.md](RELEASING.md) for the release process.
   workspaces still load (their requests appear at the collection root).
 - **Drag-and-drop** to move requests and folders between folders and
   collections in the sidebar (moving a folder takes its contents along).
+- **Batch import**: the sidebar import button now offers *Import file…* or
+  *Import folder…* — the latter recursively imports every Postman
+  collection/environment export found in a chosen folder (skipping anything
+  that isn't a recognised export).
 - Documentation now has **edit** and **preview** modes (request docs and
   collection descriptions). Existing docs open in a read-only rendered preview
   with an **Edit** button; empty docs open straight in the editor; a **Done**

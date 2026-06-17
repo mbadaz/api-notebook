@@ -3,7 +3,7 @@ import * as appData from './appData.js';
 import * as cookies from './cookies.js';
 import { applyEnvChanges, runRequest } from './execute.js';
 import { pickFile, pickFolder } from './pickFolder.js';
-import { importPostmanFile } from './importer.js';
+import { importPostmanDir, importPostmanFile } from './importer.js';
 import * as wsfs from './workspaceFs.js';
 import { HttpError } from './workspaceFs.js';
 import type { ApiRequest, WorkspaceMeta } from './types.js';
@@ -302,6 +302,14 @@ router.post(
   wrap((req, res) => {
     const ws = getWorkspace(req.params.id);
     res.json(importPostmanFile(ws, requireString(req.body.path, 'path')));
+  })
+);
+
+router.post(
+  '/workspaces/:id/import/postman-dir',
+  wrap((req, res) => {
+    const ws = getWorkspace(req.params.id);
+    res.json(importPostmanDir(ws, requireString(req.body.path, 'path')));
   })
 );
 

@@ -5,7 +5,7 @@ import { z } from 'zod';
 import * as appData from './appData.js';
 import * as cookies from './cookies.js';
 import { applyEnvChanges, runRequest } from './execute.js';
-import { importPostmanFile } from './importer.js';
+import { importPostmanDir, importPostmanFile } from './importer.js';
 import type { ApiRequest, WorkspaceMeta } from './types.js';
 import * as wsfs from './workspaceFs.js';
 
@@ -569,6 +569,17 @@ function buildServer(): McpServer {
     },
     ({ workspaceId, path }: Args) =>
       importPostmanFile(resolveWorkspace(workspaceId), path)
+  );
+
+  reg(
+    'import_postman_dir',
+    {
+      description:
+        'Batch-import every Postman collection/environment export found under a folder on this machine (recursively). Unrecognised or unparseable JSON files are skipped. Returns aggregate counts.',
+      inputSchema: { workspaceId: z.string(), path: z.string() },
+    },
+    ({ workspaceId, path }: Args) =>
+      importPostmanDir(resolveWorkspace(workspaceId), path)
   );
 
   // ---- destructive ----

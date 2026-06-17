@@ -197,6 +197,12 @@ export const api = {
       json({ path })
     ),
 
+  importPostmanDir: (id: string, path: string) =>
+    http<BatchImportResult>(
+      `/api/workspaces/${id}/import/postman-dir`,
+      json({ path })
+    ),
+
   execute: (
     id: string,
     request: ApiRequest,
@@ -233,3 +239,14 @@ export interface StoredCookie {
 export type PostmanImportResult =
   | { kind: 'collection'; collections: number; folders: number; requests: number }
   | { kind: 'environment'; name: string; variables: number };
+
+export interface BatchImportResult {
+  kind: 'batch';
+  files: number;
+  collections: number;
+  folders: number;
+  requests: number;
+  environments: number;
+  variables: number;
+  skipped: number;
+}

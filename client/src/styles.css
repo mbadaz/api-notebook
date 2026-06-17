@@ -182,7 +182,7 @@ pre,
 }
 
 .folder-tag {
-  font-size: 0.78rem;
+  font-size: 0.95rem;
   color: var(--text-muted);
 }
 
@@ -659,6 +659,7 @@ input[type='radio'] {
   border-radius: 4px;
   padding: 3px 7px;
   line-height: 1;
+  font-size: 1.05rem;
 }
 
 .icon-btn:hover {

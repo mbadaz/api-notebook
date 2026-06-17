@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { Collection, Scripts } from '../types';
-import { LazyMarkdownEditor } from './LazyMarkdownEditor';
+import { DocsEditor } from './DocsEditor';
 
 interface Props {
   collection: Collection;
@@ -88,13 +88,11 @@ export function CollectionEditor({
       </div>
 
       {tab === 'description' && (
-        <div className="docs-editor">
-          <LazyMarkdownEditor
-            value={description}
-            onChange={setDescription}
-            placeholder="Describe this collection in Markdown…"
-          />
-        </div>
+        <DocsEditor
+          value={description}
+          onChange={setDescription}
+          placeholder="Describe this collection in Markdown…"
+        />
       )}
 
       {tab === 'preReq' && (

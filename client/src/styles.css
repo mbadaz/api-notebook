@@ -810,10 +810,6 @@ input[type='radio'] {
   outline: none;
 }
 
-.md-content .ProseMirror > *:first-child {
-  margin-top: 0;
-}
-
 .md-content .ProseMirror p.is-editor-empty:first-child::before {
   content: attr(data-placeholder);
   color: var(--text-muted);
@@ -822,73 +818,98 @@ input[type='radio'] {
   pointer-events: none;
 }
 
-.md-content h1,
-.md-content h2,
-.md-content h3 {
+/* Read-only rendered docs (preview mode) */
+.markdown-preview {
+  min-height: 120px;
+  padding: 10px 16px;
+  line-height: 1.55;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow-y: auto;
+}
+
+/* Edit/preview toggle row */
+.docs-mode-toolbar {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* Shared rich-text typography for both the editor (.md-rich on the editor
+   content) and the rendered preview (.md-rich on .markdown-preview). */
+.md-content .ProseMirror > *:first-child,
+.markdown-preview > *:first-child {
+  margin-top: 0;
+}
+
+.md-rich h1,
+.md-rich h2,
+.md-rich h3 {
   line-height: 1.25;
   margin: 0.8em 0 0.4em;
 }
 
-.md-content pre {
+.md-rich pre {
   background: var(--bg-raised);
   padding: 10px;
   border-radius: 6px;
   overflow-x: auto;
 }
 
-.md-content pre code {
+.md-rich pre code {
   background: none;
   padding: 0;
   font-size: 0.86em;
 }
 
-.md-content code {
+.md-rich code {
   background: var(--bg-raised);
   padding: 1px 5px;
   border-radius: 4px;
   font-size: 0.86em;
 }
 
-.md-content a {
+.md-rich a {
   color: var(--blue);
 }
 
-.md-content blockquote {
+.md-rich blockquote {
   margin: 0.6em 0;
   padding-left: 12px;
   border-left: 3px solid var(--border);
   color: var(--text-muted);
 }
 
-.md-content img {
+.md-rich img {
   max-width: 100%;
   border-radius: 4px;
 }
 
-.md-content hr {
+.md-rich hr {
   border: none;
   border-top: 1px solid var(--border);
   margin: 1em 0;
 }
 
-.md-content table {
+.md-rich table {
   border-collapse: collapse;
   margin: 0.6em 0;
   width: auto;
 }
 
-.md-content th,
-.md-content td {
+.md-rich th,
+.md-rich td {
   border: 1px solid var(--border);
   padding: 4px 10px;
   text-align: left;
 }
 
-.md-content th {
+.md-rich th {
   background: var(--bg-raised);
   font-weight: 600;
 }
 
+/* Task lists — editor (TipTap) markup */
 .md-content ul[data-type='taskList'] {
   list-style: none;
   padding-left: 4px;
@@ -906,6 +927,18 @@ input[type='radio'] {
 
 .md-content ul[data-type='taskList'] li > div {
   flex: 1;
+}
+
+/* Task lists — preview (react-markdown + GFM) markup */
+.markdown-preview ul.contains-task-list {
+  list-style: none;
+  padding-left: 4px;
+}
+
+.markdown-preview .task-list-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
 }
 
 /* ---------- response panel ---------- */

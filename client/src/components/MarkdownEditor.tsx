@@ -68,7 +68,7 @@ export function MarkdownEditor({
   return (
     <div className="md-editor">
       <Toolbar editor={editor} />
-      <EditorContent editor={editor} className="md-content" />
+      <EditorContent editor={editor} className="md-content md-rich" />
     </div>
   );
 }

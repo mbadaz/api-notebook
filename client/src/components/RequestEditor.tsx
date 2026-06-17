@@ -13,7 +13,7 @@ import {
 import { VariablesContext } from '../variables';
 import { AuthEditor } from './AuthEditor';
 import { FormDataEditor } from './FormDataEditor';
-import { LazyMarkdownEditor } from './LazyMarkdownEditor';
+import { DocsEditor } from './DocsEditor';
 import { KeyValueEditor } from './KeyValueEditor';
 import { ResponsePanel } from './ResponsePanel';
 import { VarField } from './VarField';
@@ -469,13 +469,11 @@ export function RequestEditor({
         )}
 
         {tab === 'docs' && (
-          <div className="docs-editor">
-            <LazyMarkdownEditor
-              value={draft.docs}
-              onChange={(docs) => patch({ docs })}
-              placeholder="Document this request in Markdown…"
-            />
-          </div>
+          <DocsEditor
+            value={draft.docs}
+            onChange={(docs) => patch({ docs })}
+            placeholder="Document this request in Markdown…"
+          />
         )}
       </div>
 

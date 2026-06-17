@@ -151,9 +151,10 @@ function readRequest(
   const docs = fs.existsSync(docsFile)
     ? fs.readFileSync(docsFile, 'utf8')
     : '';
-  // Files written by older versions may predate newer body/script fields.
+  // Files written by older versions may predate newer body/script/graphql fields.
   const storedBody: Partial<ApiRequest['body']> = stored.body ?? {};
   const storedScripts: Partial<ApiRequest['scripts']> = stored.scripts ?? {};
+  const storedGraphql: Partial<ApiRequest['graphql']> = stored.graphql ?? {};
   return {
     ...stored,
     body: {
@@ -165,6 +166,7 @@ function readRequest(
       ...storedBody,
     },
     scripts: { preRequest: '', postResponse: '', ...storedScripts },
+    graphql: { query: '', variables: '', ...storedGraphql },
     id,
     docs,
   };

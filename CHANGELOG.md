@@ -8,6 +8,8 @@ See [RELEASING.md](RELEASING.md) for the release process.
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-06-18
+
 ### Added
 
 - **WebSocket requests**: a new request type that opens a live ws/wss connection
@@ -50,6 +52,8 @@ See [RELEASING.md](RELEASING.md) for the release process.
 - Switching between requests/collections no longer prompts about unsaved
   changes; unsaved edits are discarded silently on navigation. The
   unsaved-changes warning now appears only when closing the browser tab.
+- The sidebar now starts with collections and folders **collapsed**, and its
+  tree icons are slightly larger.
 
 ## [1.0.0] - 2026-06-17
 
@@ -84,5 +88,6 @@ First tagged release.
 - Cookies whose `Domain` attribute is an IP are stored host-only instead of
   being silently dropped.
 
-[Unreleased]: https://github.com/mbadaz/api-notebook/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/mbadaz/api-notebook/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/mbadaz/api-notebook/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/mbadaz/api-notebook/releases/tag/v1.0.0

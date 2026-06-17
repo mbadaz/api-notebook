@@ -31,6 +31,12 @@ See [RELEASING.md](RELEASING.md) for the release process.
   with an **Edit** button; empty docs open straight in the editor; a **Done**
   button returns to preview.
 
+### Changed
+
+- Switching between requests/collections no longer prompts about unsaved
+  changes; unsaved edits are discarded silently on navigation. The
+  unsaved-changes warning now appears only when closing the browser tab.
+
 ## [1.0.0] - 2026-06-17
 
 First tagged release.

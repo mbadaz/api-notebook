@@ -66,16 +66,9 @@ export default function App() {
     setEditorDirty(dirty);
   }, []);
 
-  /** True when it is OK to discard the current editor state. */
-  function confirmDiscard(): boolean {
-    return (
-      !editorDirtyRef.current ||
-      confirm('You have unsaved changes that will be lost. Continue?')
-    );
-  }
-
-  function selectGuarded(sel: Selection) {
-    if (!confirmDiscard()) return;
+  // Navigating between requests/collections discards unsaved edits silently —
+  // the only unsaved-changes warning is the browser tab-close prompt below.
+  function selectItem(sel: Selection) {
     handleDirtyChange(false);
     setSelection(sel);
   }
@@ -785,7 +778,6 @@ export default function App() {
         workspaces={workspaces}
         currentWorkspaceId={workspaceId}
         onSelectWorkspace={(id) => {
-          if (!confirmDiscard()) return;
           handleDirtyChange(false);
           void loadTree(id);
         }}
@@ -836,7 +828,7 @@ export default function App() {
                 }}
                 onMoveRequest={moveRequestAction}
                 onMoveFolder={moveFolderAction}
-                onSelect={selectGuarded}
+                onSelect={selectItem}
                 onNewCollection={promptNewCollection}
                 onNewEnvironment={promptNewEnvironment}
                 onImportFile={importPostman}

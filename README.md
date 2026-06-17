@@ -255,8 +255,10 @@ requests directly via `create_request` / `update_request`.)
 ## Contributing
 
 Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for how to set
-up the project, the branch/PR workflow, and our conventions. By participating you
-agree to our [Code of Conduct](CODE_OF_CONDUCT.md).
+up the project, the [branching model](CONTRIBUTING.md#branching-model), the
+PR workflow, and our conventions. `main` is protected and CI must pass before a
+pull request merges. By participating you agree to our
+[Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## Releases
 

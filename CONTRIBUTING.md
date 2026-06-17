@@ -48,6 +48,18 @@ A note specific to this repo: the request/data model is defined in **both**
 `server/src/types.ts` and `client/src/types.ts` — keep the two in sync when you
 change it.
 
+## Branching model
+
+- **Outside contributors**: fork the repo, work on a branch, and open a pull
+  request against `main` (see [Pull requests](#pull-requests)).
+- **Maintainers**: push small fixes directly to `main`, and use a short-lived
+  feature branch for larger changes, merging to `main` once CI is green.
+- `main` is **protected** — it can't be force-pushed or deleted, pull requests
+  require the CI check to pass before merging, and it's kept releasable at all
+  times.
+- **CI runs on every push and every pull request**, so changes are always
+  checked.
+
 ## Making a change
 
 1. Create a branch off `main` (e.g. `git checkout -b fix-cookie-domain`).

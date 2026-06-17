@@ -284,6 +284,7 @@ function convertRequest(item: PostmanItem): ConvertedRequest {
     auth: convertAuth(req.auth),
     body,
     graphql,
+    websocket: { url: '', subprotocols: '', messages: [] },
     docs: describe(req.description),
     scripts: eventsToScripts(item.event),
   };

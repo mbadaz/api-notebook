@@ -190,7 +190,8 @@ router.post(
   wrap((req, res) => {
     const ws = getWorkspace(req.params.id);
     const name = requireString(req.body.name, 'name');
-    const type = req.body.type === 'graphql' ? 'graphql' : 'http';
+    const allowed = ['http', 'graphql', 'websocket'] as const;
+    const type = allowed.includes(req.body.type) ? req.body.type : 'http';
     const folderPath = parseFolderPath(req.body.folderPath);
     res
       .status(201)

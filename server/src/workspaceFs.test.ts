@@ -116,6 +116,24 @@ describe('collections & requests (round-trip)', () => {
     expect(collection.folders).toEqual([]);
   });
 
+  it('persists a websocket request with its config and saved messages', () => {
+    const col = wsfs.createCollection(ws, 'WS');
+    const created = wsfs.createRequest(ws, col.id, [], 'Socket', 'websocket');
+    expect(created.websocket).toEqual({ url: '', subprotocols: '', messages: [] });
+    wsfs.updateRequest(ws, col.id, [], created.id, {
+      ...created,
+      websocket: {
+        url: 'wss://x/socket',
+        subprotocols: 'json',
+        messages: [{ name: 'ping', content: '{"op":"ping"}' }],
+      },
+    });
+    const read = wsfs.getRequest(ws, col.id, [], created.id);
+    expect(read.type).toBe('websocket');
+    expect(read.websocket.url).toBe('wss://x/socket');
+    expect(read.websocket.messages).toEqual([{ name: 'ping', content: '{"op":"ping"}' }]);
+  });
+
   it('back-fills missing fields and reads a legacy requests/ subdir', () => {
     const col = wsfs.createCollection(ws, 'Old');
     // Pre-folders workspaces stored requests in a legacy requests/ subdir.

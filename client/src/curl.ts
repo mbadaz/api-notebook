@@ -20,6 +20,9 @@ export function requestToCurl(
   req: ApiRequest,
   vars: Record<string, string>
 ): string {
+  if (req.type !== 'http' && req.type !== 'graphql') {
+    return `# Cannot export a ${req.type} request as cURL`;
+  }
   const i = (t: string) => interpolate(t, vars);
   const method = req.type === 'graphql' ? 'POST' : req.method;
 
@@ -290,6 +293,7 @@ export function parseCurl(command: string): Omit<ApiRequest, 'id'> {
     auth: basic ? { type: 'basic', basic } : { type: 'none' },
     body: { mode, content, form, formData, binaryPath },
     graphql: { query: '', variables: '' },
+    websocket: { url: '', subprotocols: '', messages: [] },
     docs: '',
     scripts: { preRequest: '', postResponse: '' },
   };

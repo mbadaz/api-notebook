@@ -66,6 +66,18 @@ interface MenuItem {
 const pathKey = (collectionId: string, folderPath: string[]): string =>
   [collectionId, ...folderPath].join('/');
 
+function badgeLabel(request: ApiRequest): string {
+  if (request.type === 'graphql') return 'GQL';
+  if (request.type === 'websocket') return 'WS';
+  return request.method;
+}
+
+function badgeClass(request: ApiRequest): string {
+  if (request.type === 'graphql') return 'method-GQL';
+  if (request.type === 'websocket') return 'method-WS';
+  return `method-${request.method}`;
+}
+
 const INDENT = 16;
 
 export function Sidebar({
@@ -226,14 +238,8 @@ export function Sidebar({
         {...dragSource({ kind: 'request', collectionId, folderPath, requestId: request.id })}
       >
         <button className="row-label" onClick={() => onSelect(sel)}>
-          <span
-            className={
-              request.type === 'graphql'
-                ? 'method-tag method-GQL'
-                : `method-tag method-${request.method}`
-            }
-          >
-            {request.type === 'graphql' ? 'GQL' : request.method}
+          <span className={`method-tag ${badgeClass(request)}`}>
+            {badgeLabel(request)}
           </span>
           {request.name}
         </button>

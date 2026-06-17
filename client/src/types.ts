@@ -1,4 +1,4 @@
-export type RequestType = 'http' | 'graphql';
+export type RequestType = 'http' | 'graphql' | 'websocket';
 
 export type HttpMethod =
   | 'GET'
@@ -62,6 +62,20 @@ export interface GraphQLBody {
   variables: string;
 }
 
+/** A reusable message/payload template the user can send on a live connection. */
+export interface SavedMessage {
+  name: string;
+  content: string;
+}
+
+/** WebSocket connection config (handshake reuses the request's headers + auth). */
+export interface WebSocketConfig {
+  url: string;
+  /** Comma- or space-separated Sec-WebSocket-Protocol values. */
+  subprotocols: string;
+  messages: SavedMessage[];
+}
+
 /** Postman-style automation scripts (JavaScript using the `pm` API). */
 export interface Scripts {
   preRequest: string;
@@ -79,6 +93,7 @@ export interface ApiRequest {
   auth: AuthConfig;
   body: RequestBody;
   graphql: GraphQLBody;
+  websocket: WebSocketConfig;
   docs: string;
   scripts: Scripts;
 }

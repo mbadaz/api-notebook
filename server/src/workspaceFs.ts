@@ -228,10 +228,12 @@ function readRequest(
   const docs = fs.existsSync(docsFile)
     ? fs.readFileSync(docsFile, 'utf8')
     : '';
-  // Files written by older versions may predate newer body/script/graphql fields.
+  // Files written by older versions may predate newer body/script/graphql/
+  // websocket fields, so back-fill each sub-object with its defaults.
   const storedBody: Partial<ApiRequest['body']> = stored.body ?? {};
   const storedScripts: Partial<ApiRequest['scripts']> = stored.scripts ?? {};
   const storedGraphql: Partial<ApiRequest['graphql']> = stored.graphql ?? {};
+  const storedWebsocket: Partial<ApiRequest['websocket']> = stored.websocket ?? {};
   return {
     ...stored,
     body: {
@@ -244,6 +246,7 @@ function readRequest(
     },
     scripts: { preRequest: '', postResponse: '', ...storedScripts },
     graphql: { query: '', variables: '', ...storedGraphql },
+    websocket: { url: '', subprotocols: '', messages: [], ...storedWebsocket },
     id,
     docs,
   };
@@ -502,6 +505,7 @@ export function defaultRequest(
     auth: { type: 'none' },
     body: { mode: 'none', content: '', form: [], formData: [], binaryPath: '' },
     graphql: { query: '', variables: '' },
+    websocket: { url: '', subprotocols: '', messages: [] },
     docs: '',
     scripts: { preRequest: '', postResponse: '' },
   };

@@ -10,6 +10,11 @@ See [RELEASING.md](RELEASING.md) for the release process.
 
 ### Added
 
+- **WebSocket requests**: a new request type that opens a live ws/wss connection
+  (routed through the server, so `{{variables}}`, headers, auth, and the cookie
+  jar apply), with a message log, a composer, and reusable saved messages.
+  Backed by a new multiplexed live channel (`/live`) shared by future streaming
+  protocols.
 - **Folders** inside collections, nestable to any depth (Postman-style).
   Folders carry their own description and pre-request/test scripts, which run in
   the execution chain (collection → folder(s) → request). Postman imports now

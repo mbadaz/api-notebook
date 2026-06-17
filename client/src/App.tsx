@@ -9,10 +9,12 @@ import { Sidebar } from './components/Sidebar';
 import { TopBar } from './components/TopBar';
 import { parseCurl } from './curl';
 import type { Selection } from './selection';
+import { ConnectionEditor } from './components/ConnectionEditor';
 import type {
   ApiRequest,
   Collection,
   Folder,
+  RequestType,
   WorkspaceMeta,
   WorkspaceTree,
 } from './types';
@@ -276,16 +278,21 @@ export default function App() {
           options: [
             { value: 'http', label: 'HTTP' },
             { value: 'graphql', label: 'GraphQL' },
+            { value: 'websocket', label: 'WebSocket' },
           ],
         },
       ],
       onSubmit: async (values) => {
+        const allowed: RequestType[] = ['http', 'graphql', 'websocket'];
+        const type = (allowed as string[]).includes(values.type)
+          ? (values.type as RequestType)
+          : 'http';
         const request = await api.createRequest(
           workspaceId,
           collectionId,
           folderPath,
           values.name,
-          values.type === 'graphql' ? 'graphql' : 'http'
+          type
         );
         await loadTree(workspaceId, true);
         if (!editorDirtyRef.current) {
@@ -664,9 +671,26 @@ export default function App() {
       const collection = findCollection(collectionId);
       const request = findRequest(collectionId, folderPath, requestId);
       if (collection && request) {
+        const key = `${collectionId}/${folderPath.join('/')}/${request.id}`;
+        if (request.type === 'websocket') {
+          return (
+            <ConnectionEditor
+              key={key}
+              workspaceId={tree.meta.id}
+              collectionId={collectionId}
+              folderPath={folderPath}
+              request={request}
+              onSaved={() => loadTree(tree.meta.id, true)}
+              onDelete={() =>
+                deleteRequestAction(collectionId, folderPath, request)
+              }
+              onDirtyChange={handleDirtyChange}
+            />
+          );
+        }
         return (
           <RequestEditor
-            key={`${collectionId}/${folderPath.join('/')}/${request.id}`}
+            key={key}
             workspaceId={tree.meta.id}
             collectionId={collectionId}
             folderPath={folderPath}

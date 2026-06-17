@@ -1,6 +1,6 @@
 # API Notebook
 
-A local-first, web-based and Git-friendly API client — like Postman, but every workspace is a
+A local-first, Git-friendly API client that you can run in your browser — like Postman, but every workspace is a
 plain folder of JSON and Markdown files you can commit, diff, and share.
 
 ![API Notebook — a request with its variable-aware URL and a syntax-highlighted JSON response](docs/screenshot.png)

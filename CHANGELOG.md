@@ -8,6 +8,13 @@ See [RELEASING.md](RELEASING.md) for the release process.
 
 ## [Unreleased]
 
+### Added
+
+- Documentation now has **edit** and **preview** modes (request docs and
+  collection descriptions). Existing docs open in a read-only rendered preview
+  with an **Edit** button; empty docs open straight in the editor; a **Done**
+  button returns to preview.
+
 ## [1.0.0] - 2026-06-17
 
 First tagged release.

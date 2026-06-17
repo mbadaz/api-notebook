@@ -10,10 +10,46 @@ See [RELEASING.md](RELEASING.md) for the release process.
 
 ### Added
 
+- **WebSocket requests**: a new request type that opens a live ws/wss connection
+  (routed through the server, so `{{variables}}`, headers, auth, and the cookie
+  jar apply), with a message log, a composer, and reusable saved messages.
+  Backed by a new multiplexed live channel (`/live`) shared by future streaming
+  protocols.
+- **Socket.IO requests**: connect to a Socket.IO server (routed through the
+  server like WebSocket, with a configurable handshake path, JSON `auth`
+  payload, query parameters, and an events filter), emit named events with JSON
+  arguments, and watch incoming events in the live log, with reusable saved
+  emits.
+- **MCP requests**: connect to an external MCP server over Streamable HTTP
+  (routed through the server, reusing headers and auth), browse its tools, fill
+  in a tool's arguments via a form generated from its JSON Schema, call it, and
+  view the result. STDIO transport is not supported yet.
+- **Folders** inside collections, nestable to any depth (Postman-style).
+  Folders carry their own description and pre-request/test scripts, which run in
+  the execution chain (collection → folder(s) → request). Postman imports now
+  preserve their folder structure instead of flattening it into separate
+  collections. On disk, folders are mirrored as nested directories; pre-folders
+  workspaces still load (their requests appear at the collection root).
+- **Drag-and-drop** to move requests and folders between folders and
+  collections in the sidebar (moving a folder takes its contents along).
+- **Batch import**: the sidebar import button now offers *Import file…* or
+  *Import folder…* — the latter recursively imports every Postman
+  collection/environment export found in a chosen folder (skipping anything
+  that isn't a recognised export).
+- **Saved responses**: each request now keeps its last 3 responses, so reopening
+  a request shows its recent results (with a switcher to step back through them).
+  Responses are a local cache stored beside each request and are gitignored
+  (they can contain tokens/PII), like secret environment values.
 - Documentation now has **edit** and **preview** modes (request docs and
   collection descriptions). Existing docs open in a read-only rendered preview
   with an **Edit** button; empty docs open straight in the editor; a **Done**
   button returns to preview.
+
+### Changed
+
+- Switching between requests/collections no longer prompts about unsaved
+  changes; unsaved edits are discarded silently on navigation. The
+  unsaved-changes warning now appears only when closing the browser tab.
 
 ## [1.0.0] - 2026-06-17
 

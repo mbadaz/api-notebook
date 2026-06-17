@@ -149,6 +149,12 @@ pre,
   background: rgba(255, 122, 69, 0.13);
 }
 
+.sidebar-row.drop-target {
+  outline: 1px dashed var(--accent, #ff7a45);
+  outline-offset: -1px;
+  background: rgba(255, 122, 69, 0.08);
+}
+
 .sidebar-row .icon-btn {
   visibility: hidden;
 }
@@ -175,8 +181,9 @@ pre,
   text-overflow: ellipsis;
 }
 
-.request-row {
-  margin-left: 22px;
+.folder-tag {
+  font-size: 0.78rem;
+  color: var(--text-muted);
 }
 
 .sidebar-empty {
@@ -208,6 +215,9 @@ pre,
 .method-HEAD,
 .method-OPTIONS { color: var(--text-muted); }
 .method-GQL { color: var(--pink); }
+.method-WS { color: var(--blue); }
+.method-IO { color: var(--green); }
+.method-MCP { color: var(--yellow); }
 
 /* ---------- main pane ---------- */
 
@@ -286,6 +296,137 @@ pre,
 .type-graphql { background: #3b2436; color: var(--pink); }
 .type-env { background: #24303b; color: var(--blue); }
 .type-collection { background: #3b3324; color: var(--yellow); }
+.type-folder { background: #2a3340; color: var(--blue); }
+.type-websocket { background: #24323b; color: var(--blue); }
+.type-socketio { background: #243b2c; color: var(--green); }
+.type-mcp { background: #3b3324; color: var(--yellow); }
+
+/* ----- live connection (WebSocket/Socket.IO/MCP) ----- */
+.conn-status {
+  text-transform: uppercase;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-muted);
+  min-width: 78px;
+  text-align: center;
+}
+.conn-open { background: rgba(70, 180, 110, 0.18); color: var(--green); }
+.conn-connecting { background: rgba(220, 180, 70, 0.18); color: var(--yellow); }
+.conn-error { background: rgba(220, 90, 90, 0.18); color: var(--red); }
+.conn-closed { background: rgba(255, 255, 255, 0.06); color: var(--text-muted); }
+
+.message-log-panel {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  border-top: 1px solid var(--border);
+}
+.message-log {
+  flex: 1;
+  min-height: 120px;
+  overflow-y: auto;
+  padding: 8px 12px;
+  font-family: var(--mono, monospace);
+  font-size: 0.85rem;
+}
+.log-entry {
+  display: grid;
+  grid-template-columns: 14px 64px 1fr;
+  gap: 8px;
+  padding: 2px 0;
+  align-items: start;
+}
+.log-arrow { color: var(--text-muted); }
+.log-in .log-arrow { color: var(--green); }
+.log-out .log-arrow { color: var(--blue); }
+.log-time { color: var(--text-muted); font-size: 0.75rem; }
+.log-text { margin: 0; white-space: pre-wrap; word-break: break-word; }
+.log-system .log-text { color: var(--text-muted); font-style: italic; }
+
+.message-composer {
+  display: flex;
+  gap: 8px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--border);
+}
+.message-composer .code-area { flex: 1; min-height: 56px; }
+.event-name-input { align-self: flex-start; width: 140px; }
+
+.advanced-field { margin-top: 4px; }
+.advanced-field > summary {
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 0.85em;
+  user-select: none;
+  width: fit-content;
+}
+
+/* ----- MCP editor ----- */
+.mcp-content { overflow: auto; }
+.mcp-tools { display: flex; gap: 16px; align-items: flex-start; }
+.mcp-tool-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 160px;
+  max-width: 220px;
+}
+.mcp-tool {
+  text-align: left;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-elev);
+  color: var(--text);
+  cursor: pointer;
+}
+.mcp-tool.selected { border-color: var(--blue); color: var(--blue); }
+.mcp-tool-detail { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+.mcp-tool-name { margin: 0; font-size: 1em; }
+
+.schema-form { display: flex; flex-direction: column; gap: 12px; }
+.schema-field { display: flex; flex-direction: column; gap: 4px; }
+.required-mark { color: var(--red); }
+.field-hint { color: var(--text-muted); font-weight: normal; }
+.checkbox-label { display: flex; gap: 6px; align-items: center; cursor: pointer; }
+
+.mcp-result {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 8px 10px;
+  background: var(--bg-elev);
+}
+.mcp-result-error { border-color: var(--red); }
+.mcp-result-head {
+  font-size: 0.8em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+.mcp-result-error .mcp-result-head { color: var(--red); }
+.mcp-result-text { margin: 0; white-space: pre-wrap; word-break: break-word; }
+.composer-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  justify-content: flex-start;
+}
+
+.saved-messages { display: flex; flex-direction: column; gap: 12px; }
+.saved-message { display: flex; flex-direction: column; gap: 6px; }
+.saved-message-head { display: flex; gap: 8px; align-items: center; }
+.saved-message .code-area { min-height: 60px; }
+.field-label {
+  display: block;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
 
 .ctx-backdrop {
   position: fixed;

@@ -128,4 +128,239 @@ describe('workspace/collection/request endpoints', () => {
     expect(res.body.status).toBe(200);
     expect(res.body.script.tests[0]).toMatchObject({ name: 'ok', passed: true });
   });
+
+  it('persists the response and serves it back from the history endpoint', async () => {
+    const before = await request(app)
+      .get(`/api/workspaces/${WID}/collections/${CID}/requests/${RID}/responses`)
+      .expect(200);
+    expect(Array.isArray(before.body)).toBe(true);
+    expect(before.body.length).toBeGreaterThan(0);
+    expect(before.body[0]).toMatchObject({ status: 200 });
+    expect(before.body[0].savedAt).toBeTruthy();
+  });
+});
+
+describe('folder endpoints', () => {
+  let wsId: string;
+  let cid: string;
+  let folderId: string;
+
+  beforeAll(async () => {
+    const wd = fs.mkdtempSync(path.join(os.tmpdir(), 'apinb-folders-'));
+    const ws = await request(app)
+      .post('/api/workspaces')
+      .send({ name: 'Folders WS', path: wd })
+      .expect(201);
+    wsId = ws.body.id;
+    const col = await request(app)
+      .post(`/api/workspaces/${wsId}/collections`)
+      .send({ name: 'C' })
+      .expect(201);
+    cid = col.body.id;
+  });
+
+  it('creates a folder, a nested folder, and a request inside it', async () => {
+    const folder = await request(app)
+      .post(`/api/workspaces/${wsId}/collections/${cid}/folders`)
+      .send({ name: 'Admin' })
+      .expect(201);
+    folderId = folder.body.id;
+    const sub = await request(app)
+      .post(`/api/workspaces/${wsId}/collections/${cid}/folders`)
+      .send({ name: 'Users', folderPath: folderId })
+      .expect(201);
+
+    await request(app)
+      .post(`/api/workspaces/${wsId}/collections/${cid}/requests`)
+      .send({ name: 'List', type: 'http', folderPath: `${folderId}/${sub.body.id}` })
+      .expect(201);
+
+    const tree = await request(app).get(`/api/workspaces/${wsId}`).expect(200);
+    const col = tree.body.collections.find((c: { id: string }) => c.id === cid);
+    const admin = col.folders.find((f: { id: string }) => f.id === folderId);
+    expect(admin.name).toBe('Admin');
+    expect(admin.folders[0].name).toBe('Users');
+    expect(admin.folders[0].requests.map((r: { name: string }) => r.name)).toEqual([
+      'List',
+    ]);
+  });
+
+  it("runs a folder's scripts in the execution chain", async () => {
+    await request(app)
+      .patch(`/api/workspaces/${wsId}/collections/${cid}/folders?folderPath=${folderId}`)
+      .send({
+        scripts: {
+          preRequest: '',
+          postResponse: 'pm.test("folder", () => pm.expect(true).to.be.ok);',
+        },
+      })
+      .expect(204);
+
+    const full = {
+      id: 'r',
+      name: 'r',
+      type: 'http',
+      method: 'GET',
+      url: `${targetBase}/x`,
+      params: [],
+      headers: [],
+      auth: { type: 'none' },
+      body: { mode: 'none', content: '', form: [], formData: [], binaryPath: '' },
+      graphql: { query: '', variables: '' },
+      docs: '',
+      scripts: { preRequest: '', postResponse: '' },
+    };
+    const res = await request(app)
+      .post(`/api/workspaces/${wsId}/execute`)
+      .send({ request: full, collectionId: cid, folderPath: folderId })
+      .expect(200);
+    expect(res.body.script.tests.map((t: { name: string }) => t.name)).toContain(
+      'folder'
+    );
+  });
+
+  it('moves a request into a folder via the move endpoint', async () => {
+    const r = await request(app)
+      .post(`/api/workspaces/${wsId}/collections/${cid}/requests`)
+      .send({ name: 'Loose', type: 'http' })
+      .expect(201);
+
+    const moved = await request(app)
+      .post(`/api/workspaces/${wsId}/move`)
+      .send({
+        kind: 'request',
+        from: { collectionId: cid, folderPath: '', requestId: r.body.id },
+        to: { collectionId: cid, folderPath: folderId },
+      })
+      .expect(200);
+    expect(moved.body.folderPath).toEqual([folderId]);
+
+    const tree = await request(app).get(`/api/workspaces/${wsId}`).expect(200);
+    const col = tree.body.collections.find((c: { id: string }) => c.id === cid);
+    const admin = col.folders.find((f: { id: string }) => f.id === folderId);
+    expect(admin.requests.map((x: { id: string }) => x.id)).toContain(r.body.id);
+    expect(col.requests.map((x: { id: string }) => x.id)).not.toContain(r.body.id);
+  });
+
+  it('deletes a folder and its contents', async () => {
+    await request(app)
+      .delete(`/api/workspaces/${wsId}/collections/${cid}/folders?folderPath=${folderId}`)
+      .expect(204);
+    const tree = await request(app).get(`/api/workspaces/${wsId}`).expect(200);
+    const col = tree.body.collections.find((c: { id: string }) => c.id === cid);
+    expect(col.folders).toEqual([]);
+  });
+
+  it('imports a Postman collection preserving folder nesting', async () => {
+    const fixture = path.join(wsDir, 'export.json');
+    fs.writeFileSync(
+      fixture,
+      JSON.stringify({
+        info: {
+          name: 'Imported',
+          schema:
+            'https://schema.getpostman.com/json/collection/v2.1.0/collection.json',
+        },
+        item: [
+          {
+            name: 'Group',
+            item: [
+              { name: 'Ping', request: { method: 'GET', url: { raw: 'http://x/ping' } } },
+            ],
+          },
+          { name: 'Root', request: { method: 'GET', url: { raw: 'http://x/root' } } },
+        ],
+      })
+    );
+    const res = await request(app)
+      .post(`/api/workspaces/${wsId}/import/postman`)
+      .send({ path: fixture })
+      .expect(200);
+    expect(res.body).toMatchObject({
+      kind: 'collection',
+      collections: 1,
+      folders: 1,
+      requests: 2,
+    });
+
+    const tree = await request(app).get(`/api/workspaces/${wsId}`).expect(200);
+    const imported = tree.body.collections.find(
+      (c: { name: string }) => c.name === 'Imported'
+    );
+    expect(imported.folders[0].name).toBe('Group');
+    expect(imported.folders[0].requests[0].name).toBe('Ping');
+    expect(imported.requests.map((r: { name: string }) => r.name)).toEqual(['Root']);
+  });
+});
+
+describe('batch import (folder)', () => {
+  const SCHEMA =
+    'https://schema.getpostman.com/json/collection/v2.1.0/collection.json';
+  let wsId: string;
+  let importDir: string;
+
+  beforeAll(async () => {
+    const wd = fs.mkdtempSync(path.join(os.tmpdir(), 'apinb-batchws-'));
+    const ws = await request(app)
+      .post('/api/workspaces')
+      .send({ name: 'Batch WS', path: wd })
+      .expect(201);
+    wsId = ws.body.id;
+
+    importDir = fs.mkdtempSync(path.join(os.tmpdir(), 'apinb-batch-'));
+    fs.writeFileSync(
+      path.join(importDir, 'col1.json'),
+      JSON.stringify({
+        info: { name: 'One', schema: SCHEMA },
+        item: [{ name: 'A', request: { method: 'GET', url: { raw: 'http://x/a' } } }],
+      })
+    );
+    fs.writeFileSync(
+      path.join(importDir, 'env.json'),
+      JSON.stringify({
+        name: 'dev',
+        _postman_variable_scope: 'environment',
+        values: [{ key: 'base', value: 'http://x', enabled: true }],
+      })
+    );
+    // Not a Postman export — should be skipped.
+    fs.writeFileSync(path.join(importDir, 'notes.json'), JSON.stringify({ hello: 'world' }));
+    // A non-JSON file — should be ignored entirely.
+    fs.writeFileSync(path.join(importDir, 'README.md'), '# ignore me');
+    // A nested export — recursion should pick it up.
+    const sub = path.join(importDir, 'nested');
+    fs.mkdirSync(sub);
+    fs.writeFileSync(
+      path.join(sub, 'col2.json'),
+      JSON.stringify({
+        info: { name: 'Two', schema: SCHEMA },
+        item: [{ name: 'B', request: { method: 'GET', url: { raw: 'http://x/b' } } }],
+      })
+    );
+  });
+
+  afterAll(() => fs.rmSync(importDir, { recursive: true, force: true }));
+
+  it('imports every recognised export recursively and reports counts', async () => {
+    const res = await request(app)
+      .post(`/api/workspaces/${wsId}/import/postman-dir`)
+      .send({ path: importDir })
+      .expect(200);
+    expect(res.body).toMatchObject({
+      kind: 'batch',
+      files: 4, // col1, env, notes, nested/col2 (README.md is not .json)
+      collections: 2,
+      requests: 2,
+      environments: 1,
+      variables: 1,
+      skipped: 1, // notes.json
+    });
+
+    const tree = await request(app).get(`/api/workspaces/${wsId}`).expect(200);
+    expect(tree.body.collections.map((c: { name: string }) => c.name).sort()).toEqual([
+      'One',
+      'Two',
+    ]);
+    expect(tree.body.environments.map((e: { name: string }) => e.name)).toContain('dev');
+  });
 });

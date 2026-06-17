@@ -1,4 +1,4 @@
-export type RequestType = 'http' | 'graphql';
+export type RequestType = 'http' | 'graphql' | 'websocket' | 'socketio' | 'mcp';
 
 export type HttpMethod =
   | 'GET'
@@ -62,6 +62,40 @@ export interface GraphQLBody {
   variables: string;
 }
 
+/** A reusable message/payload template the user can send on a live connection. */
+export interface SavedMessage {
+  name: string;
+  content: string;
+}
+
+/** WebSocket connection config (handshake reuses the request's headers + auth). */
+export interface WebSocketConfig {
+  url: string;
+  /** Comma- or space-separated Sec-WebSocket-Protocol values. */
+  subprotocols: string;
+  messages: SavedMessage[];
+}
+
+/** Socket.IO connection config (handshake reuses the request's headers + auth). */
+export interface SocketIOConfig {
+  url: string;
+  /** Custom handshake path; blank uses the Socket.IO default (/socket.io). */
+  path: string;
+  /** JSON object sent as the connection `auth` payload (blank for none). */
+  auth: string;
+  /** Handshake query parameters. */
+  query: KeyValue[];
+  /** Reusable emit templates: `name` is the event, `content` is JSON args. */
+  emitEvents: SavedMessage[];
+  /** Event names to listen for; empty means listen to every event. */
+  listenEvents: string[];
+}
+
+/** MCP client config (Streamable HTTP transport; reuses headers + auth). */
+export interface McpConfig {
+  url: string;
+}
+
 /** Postman-style automation scripts (JavaScript using the `pm` API). */
 export interface Scripts {
   preRequest: string;
@@ -79,8 +113,20 @@ export interface ApiRequest {
   auth: AuthConfig;
   body: RequestBody;
   graphql: GraphQLBody;
+  websocket: WebSocketConfig;
+  socketio: SocketIOConfig;
+  mcp: McpConfig;
   docs: string;
   scripts: Scripts;
+}
+
+export interface Folder {
+  id: string;
+  name: string;
+  description: string;
+  scripts: Scripts;
+  folders: Folder[];
+  requests: ApiRequest[];
 }
 
 export interface Collection {
@@ -88,6 +134,8 @@ export interface Collection {
   name: string;
   description: string;
   scripts: Scripts;
+  folders: Folder[];
+  /** Requests sitting directly at the collection root (outside any folder). */
   requests: ApiRequest[];
 }
 
@@ -137,4 +185,6 @@ export interface ExecutionResult {
   resolvedUrl: string;
   /** Present when pre-request or post-response scripts ran. */
   script?: ScriptOutcome;
+  /** ISO timestamp set when the response is saved to the request's history. */
+  savedAt?: string;
 }

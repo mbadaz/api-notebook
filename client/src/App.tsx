@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from './api';
-import { CollectionEditor } from './components/CollectionEditor';
+import { NodeEditor } from './components/NodeEditor';
 import { CookieManager } from './components/CookieManager';
 import { EnvironmentEditor } from './components/EnvironmentEditor';
 import { PromptModal, type PromptConfig } from './components/PromptModal';
@@ -9,7 +9,16 @@ import { Sidebar } from './components/Sidebar';
 import { TopBar } from './components/TopBar';
 import { parseCurl } from './curl';
 import type { Selection } from './selection';
-import type { ApiRequest, WorkspaceMeta, WorkspaceTree } from './types';
+import { ConnectionEditor } from './components/ConnectionEditor';
+import { McpEditor } from './components/McpEditor';
+import type {
+  ApiRequest,
+  Collection,
+  Folder,
+  RequestType,
+  WorkspaceMeta,
+  WorkspaceTree,
+} from './types';
 import { VariablesContext, type VariablesInfo } from './variables';
 
 const LAST_WORKSPACE_KEY = 'apinotebook.lastWorkspace';
@@ -60,16 +69,9 @@ export default function App() {
     setEditorDirty(dirty);
   }, []);
 
-  /** True when it is OK to discard the current editor state. */
-  function confirmDiscard(): boolean {
-    return (
-      !editorDirtyRef.current ||
-      confirm('You have unsaved changes that will be lost. Continue?')
-    );
-  }
-
-  function selectGuarded(sel: Selection) {
-    if (!confirmDiscard()) return;
+  // Navigating between requests/collections discards unsaved edits silently —
+  // the only unsaved-changes warning is the browser tab-close prompt below.
+  function selectItem(sel: Selection) {
     handleDirtyChange(false);
     setSelection(sel);
   }
@@ -169,13 +171,40 @@ export default function App() {
     window.addEventListener('mouseup', onUp);
   }
 
+  function findCollection(collectionId: string): Collection | undefined {
+    return tree?.collections.find((c) => c.id === collectionId);
+  }
+
+  /** The container at a folder path — the collection itself when path is []. */
+  function findNode(
+    collectionId: string,
+    folderPath: string[]
+  ): { folders: Folder[]; requests: ApiRequest[] } | undefined {
+    let node: { folders: Folder[]; requests: ApiRequest[] } | undefined =
+      findCollection(collectionId);
+    for (const slug of folderPath) {
+      node = node?.folders.find((f) => f.id === slug);
+      if (!node) return undefined;
+    }
+    return node;
+  }
+
+  function findFolder(
+    collectionId: string,
+    folderPath: string[]
+  ): Folder | undefined {
+    if (folderPath.length === 0) return undefined;
+    return findNode(collectionId, folderPath) as Folder | undefined;
+  }
+
   function findRequest(
     collectionId: string,
+    folderPath: string[],
     requestId: string
   ): ApiRequest | undefined {
-    return tree?.collections
-      .find((c) => c.id === collectionId)
-      ?.requests.find((r) => r.id === requestId);
+    return findNode(collectionId, folderPath)?.requests.find(
+      (r) => r.id === requestId
+    );
   }
 
   // ----- workspace prompts -----
@@ -237,7 +266,7 @@ export default function App() {
     });
   }
 
-  function promptNewRequest(collectionId: string) {
+  function promptNewRequest(collectionId: string, folderPath: string[]) {
     if (!workspaceId) return;
     setPrompt({
       title: 'New Request',
@@ -250,22 +279,55 @@ export default function App() {
           options: [
             { value: 'http', label: 'HTTP' },
             { value: 'graphql', label: 'GraphQL' },
+            { value: 'websocket', label: 'WebSocket' },
+            { value: 'socketio', label: 'Socket.IO' },
+            { value: 'mcp', label: 'MCP (HTTP)' },
           ],
         },
       ],
       onSubmit: async (values) => {
+        const allowed: RequestType[] = ['http', 'graphql', 'websocket', 'socketio', 'mcp'];
+        const type = (allowed as string[]).includes(values.type)
+          ? (values.type as RequestType)
+          : 'http';
         const request = await api.createRequest(
           workspaceId,
           collectionId,
+          folderPath,
           values.name,
-          values.type === 'graphql' ? 'graphql' : 'http'
+          type
         );
         await loadTree(workspaceId, true);
         if (!editorDirtyRef.current) {
           setSelection({
             kind: 'request',
             collectionId,
+            folderPath,
             requestId: request.id,
+          });
+        }
+      },
+    });
+  }
+
+  function promptNewFolder(collectionId: string, parentPath: string[]) {
+    if (!workspaceId) return;
+    setPrompt({
+      title: 'New Folder',
+      fields: [{ name: 'name', label: 'Name', placeholder: 'Admin' }],
+      onSubmit: async (values) => {
+        const folder = await api.createFolder(
+          workspaceId,
+          collectionId,
+          parentPath,
+          values.name
+        );
+        await loadTree(workspaceId, true);
+        if (!editorDirtyRef.current) {
+          setSelection({
+            kind: 'folder',
+            collectionId,
+            folderPath: [...parentPath, folder.id],
           });
         }
       },
@@ -287,8 +349,12 @@ export default function App() {
     });
   }
 
-  function promptRenameRequest(collectionId: string, requestId: string) {
-    const request = findRequest(collectionId, requestId);
+  function promptRenameRequest(
+    collectionId: string,
+    folderPath: string[],
+    requestId: string
+  ) {
+    const request = findRequest(collectionId, folderPath, requestId);
     if (!request || !workspaceId) return;
     setPrompt({
       title: 'Rename Request',
@@ -297,7 +363,7 @@ export default function App() {
       onSubmit: async (values) => {
         const name = values.name.trim();
         if (!name) throw new Error('Name is required');
-        await api.updateRequest(workspaceId, collectionId, {
+        await api.updateRequest(workspaceId, collectionId, folderPath, {
           ...request,
           name,
         });
@@ -306,23 +372,32 @@ export default function App() {
     });
   }
 
-  function promptRenameCollection(collectionId: string) {
-    const collection = tree?.collections.find((c) => c.id === collectionId);
-    if (!collection || !workspaceId) return;
+  /** Renames a collection (folderPath []) or a folder. */
+  function promptRenameNode(collectionId: string, folderPath: string[]) {
+    if (!workspaceId) return;
+    const isFolder = folderPath.length > 0;
+    const node = isFolder
+      ? findFolder(collectionId, folderPath)
+      : findCollection(collectionId);
+    if (!node) return;
     setPrompt({
-      title: 'Rename Collection',
+      title: isFolder ? 'Rename Folder' : 'Rename Collection',
       submitLabel: 'Rename',
-      fields: [{ name: 'name', label: 'Name', initial: collection.name }],
+      fields: [{ name: 'name', label: 'Name', initial: node.name }],
       onSubmit: async (values) => {
         const name = values.name.trim();
         if (!name) throw new Error('Name is required');
-        await api.updateCollection(workspaceId, collectionId, { name });
+        if (isFolder) {
+          await api.updateFolder(workspaceId, collectionId, folderPath, { name });
+        } else {
+          await api.updateCollection(workspaceId, collectionId, { name });
+        }
         await loadTree(workspaceId, true);
       },
     });
   }
 
-  function promptImportCurl(collectionId: string) {
+  function promptImportCurl(collectionId: string, folderPath: string[]) {
     if (!workspaceId) return;
     setPrompt({
       title: 'Import cURL',
@@ -341,10 +416,11 @@ export default function App() {
         const created = await api.createRequest(
           workspaceId,
           collectionId,
+          folderPath,
           parsed.name,
           'http'
         );
-        await api.updateRequest(workspaceId, collectionId, {
+        await api.updateRequest(workspaceId, collectionId, folderPath, {
           ...parsed,
           id: created.id,
         });
@@ -353,6 +429,7 @@ export default function App() {
           setSelection({
             kind: 'request',
             collectionId,
+            folderPath,
             requestId: created.id,
           });
         }
@@ -373,8 +450,10 @@ export default function App() {
         result.kind === 'collection'
           ? `Imported ${result.requests} request${
               result.requests === 1 ? '' : 's'
-            } into ${result.collections} collection${
-              result.collections === 1 ? '' : 's'
+            }${
+              result.folders
+                ? ` across ${result.folders} folder${result.folders === 1 ? '' : 's'}`
+                : ''
             }.`
           : `Imported environment "${result.name}" with ${result.variables} variable${
               result.variables === 1 ? '' : 's'
@@ -385,8 +464,39 @@ export default function App() {
     }
   }
 
+  async function importPostmanFolder() {
+    if (!workspaceId) return;
+    try {
+      const picked = await api.pickFolder(
+        'Choose a folder of Postman exports to import'
+      );
+      if (!picked.path) return;
+      const r = await api.importPostmanDir(workspaceId, picked.path);
+      await loadTree(workspaceId, true);
+      if (r.collections === 0 && r.environments === 0) {
+        setToast(
+          r.files === 0
+            ? 'No JSON files found in that folder.'
+            : `No Postman exports found (skipped ${r.skipped} file${r.skipped === 1 ? '' : 's'}).`
+        );
+        return;
+      }
+      const parts: string[] = [];
+      if (r.collections)
+        parts.push(`${r.collections} collection${r.collections === 1 ? '' : 's'} (${r.requests} request${r.requests === 1 ? '' : 's'})`);
+      if (r.environments)
+        parts.push(`${r.environments} environment${r.environments === 1 ? '' : 's'}`);
+      setToast(
+        `Imported ${parts.join(' and ')}${r.skipped ? `; skipped ${r.skipped}` : ''}.`
+      );
+    } catch (err) {
+      showError(err);
+    }
+  }
+
   async function copyRequestInto(
     collectionId: string,
+    folderPath: string[],
     source: ApiRequest,
     name: string
   ) {
@@ -395,10 +505,11 @@ export default function App() {
       const created = await api.createRequest(
         workspaceId,
         collectionId,
+        folderPath,
         name,
         source.type
       );
-      await api.updateRequest(workspaceId, collectionId, {
+      await api.updateRequest(workspaceId, collectionId, folderPath, {
         ...structuredClone(source),
         id: created.id,
         name,
@@ -409,15 +520,20 @@ export default function App() {
     }
   }
 
-  async function deleteRequestAction(collectionId: string, request: ApiRequest) {
+  async function deleteRequestAction(
+    collectionId: string,
+    folderPath: string[],
+    request: ApiRequest
+  ) {
     if (!workspaceId) return;
     if (!confirm(`Delete request "${request.name}"?`)) return;
     try {
-      await api.deleteRequest(workspaceId, collectionId, request.id);
+      await api.deleteRequest(workspaceId, collectionId, folderPath, request.id);
       setSelection((sel) =>
         sel?.kind === 'request' &&
         sel.collectionId === collectionId &&
-        sel.requestId === request.id
+        sel.requestId === request.id &&
+        sel.folderPath.join('/') === folderPath.join('/')
           ? null
           : sel
       );
@@ -428,26 +544,94 @@ export default function App() {
     }
   }
 
-  async function deleteCollectionAction(collection: {
-    id: string;
-    name: string;
-  }) {
+  /** Deletes a collection (folderPath []) or a folder, with its contents. */
+  async function deleteNode(collectionId: string, folderPath: string[]) {
     if (!workspaceId) return;
-    if (
-      !confirm(`Delete collection "${collection.name}" and all its requests?`)
-    ) {
+    const isFolder = folderPath.length > 0;
+    const node = isFolder
+      ? findFolder(collectionId, folderPath)
+      : findCollection(collectionId);
+    if (!node) return;
+    const label = isFolder ? 'folder' : 'collection';
+    if (!confirm(`Delete ${label} "${node.name}" and everything inside it?`)) {
       return;
     }
     try {
-      await api.deleteCollection(workspaceId, collection.id);
-      setSelection((sel) =>
-        (sel?.kind === 'collection' || sel?.kind === 'request') &&
-        sel.collectionId === collection.id
-          ? null
-          : sel
-      );
+      if (isFolder) {
+        await api.deleteFolder(workspaceId, collectionId, folderPath);
+      } else {
+        await api.deleteCollection(workspaceId, collectionId);
+      }
+      // Clear the selection if it pointed inside the deleted node.
+      setSelection((sel) => {
+        if (!sel || sel.kind === 'environment') return sel;
+        if (sel.collectionId !== collectionId) return sel;
+        const selPath =
+          sel.kind === 'collection' ? [] : sel.folderPath;
+        const prefix = folderPath.join('/');
+        const within =
+          selPath.join('/') === prefix ||
+          selPath.join('/').startsWith(prefix + '/') ||
+          (!isFolder);
+        return within ? null : sel;
+      });
       handleDirtyChange(false);
       await loadTree(workspaceId, true);
+    } catch (err) {
+      showError(err);
+    }
+  }
+
+  async function moveRequestAction(
+    from: { collectionId: string; folderPath: string[]; requestId: string },
+    to: { collectionId: string; folderPath: string[] }
+  ) {
+    if (!workspaceId) return;
+    try {
+      const result = await api.moveRequest(workspaceId, from, to);
+      await loadTree(workspaceId, true);
+      setSelection((sel) =>
+        sel?.kind === 'request' &&
+        sel.collectionId === from.collectionId &&
+        sel.requestId === from.requestId &&
+        sel.folderPath.join('/') === from.folderPath.join('/')
+          ? {
+              kind: 'request',
+              collectionId: result.collectionId,
+              folderPath: result.folderPath,
+              requestId: result.requestId,
+            }
+          : sel
+      );
+    } catch (err) {
+      showError(err);
+    }
+  }
+
+  async function moveFolderAction(
+    from: { collectionId: string; folderPath: string[] },
+    to: { collectionId: string; folderPath: string[] }
+  ) {
+    if (!workspaceId) return;
+    try {
+      const result = await api.moveFolder(workspaceId, from, to);
+      await loadTree(workspaceId, true);
+      // Remap a selection that pointed inside the moved subtree to its new path.
+      setSelection((sel) => {
+        if (!sel || sel.kind === 'environment' || sel.kind === 'collection') {
+          return sel;
+        }
+        if (sel.collectionId !== from.collectionId) return sel;
+        const fromKey = from.folderPath.join('/');
+        const selKey = sel.folderPath.join('/');
+        if (selKey !== fromKey && !selKey.startsWith(fromKey + '/')) return sel;
+        const suffix = sel.folderPath.slice(from.folderPath.length);
+        return {
+          ...sel,
+          collectionId: result.collectionId,
+          folderPath: [...result.folderPath, ...suffix],
+        };
+      });
     } catch (err) {
       showError(err);
     }
@@ -486,21 +670,54 @@ export default function App() {
     }
 
     if (selection?.kind === 'request') {
-      const collection = tree.collections.find(
-        (c) => c.id === selection.collectionId
-      );
-      const request = collection?.requests.find(
-        (r) => r.id === selection.requestId
-      );
+      const { collectionId, folderPath, requestId } = selection;
+      const collection = findCollection(collectionId);
+      const request = findRequest(collectionId, folderPath, requestId);
       if (collection && request) {
+        const key = `${collectionId}/${folderPath.join('/')}/${request.id}`;
+        if (request.type === 'mcp') {
+          return (
+            <McpEditor
+              key={key}
+              workspaceId={tree.meta.id}
+              collectionId={collectionId}
+              folderPath={folderPath}
+              request={request}
+              onSaved={() => loadTree(tree.meta.id, true)}
+              onDelete={() =>
+                deleteRequestAction(collectionId, folderPath, request)
+              }
+              onDirtyChange={handleDirtyChange}
+            />
+          );
+        }
+        if (request.type === 'websocket' || request.type === 'socketio') {
+          return (
+            <ConnectionEditor
+              key={key}
+              workspaceId={tree.meta.id}
+              collectionId={collectionId}
+              folderPath={folderPath}
+              request={request}
+              onSaved={() => loadTree(tree.meta.id, true)}
+              onDelete={() =>
+                deleteRequestAction(collectionId, folderPath, request)
+              }
+              onDirtyChange={handleDirtyChange}
+            />
+          );
+        }
         return (
           <RequestEditor
-            key={`${collection.id}/${request.id}`}
+            key={key}
             workspaceId={tree.meta.id}
-            collectionId={collection.id}
+            collectionId={collectionId}
+            folderPath={folderPath}
             request={request}
             onSaved={() => loadTree(tree.meta.id, true)}
-            onDelete={() => deleteRequestAction(collection.id, request)}
+            onDelete={() =>
+              deleteRequestAction(collectionId, folderPath, request)
+            }
             onDirtyChange={handleDirtyChange}
             onVariablesChanged={() => loadTree(tree.meta.id, true)}
           />
@@ -509,19 +726,43 @@ export default function App() {
     }
 
     if (selection?.kind === 'collection') {
-      const collection = tree.collections.find(
-        (c) => c.id === selection.collectionId
-      );
+      const collection = findCollection(selection.collectionId);
       if (collection) {
         return (
-          <CollectionEditor
+          <NodeEditor
             key={collection.id}
-            collection={collection}
+            kind="collection"
+            node={collection}
             onSave={async (changes) => {
               await api.updateCollection(tree.meta.id, collection.id, changes);
               await loadTree(tree.meta.id, true);
             }}
-            onDelete={() => deleteCollectionAction(collection)}
+            onDelete={() => deleteNode(collection.id, [])}
+            onDirtyChange={handleDirtyChange}
+          />
+        );
+      }
+    }
+
+    if (selection?.kind === 'folder') {
+      const { collectionId, folderPath } = selection;
+      const folder = findFolder(collectionId, folderPath);
+      if (folder) {
+        return (
+          <NodeEditor
+            key={`${collectionId}/${folderPath.join('/')}`}
+            kind="folder"
+            node={folder}
+            onSave={async (changes) => {
+              await api.updateFolder(
+                tree.meta.id,
+                collectionId,
+                folderPath,
+                changes
+              );
+              await loadTree(tree.meta.id, true);
+            }}
+            onDelete={() => deleteNode(collectionId, folderPath)}
             onDirtyChange={handleDirtyChange}
           />
         );
@@ -580,7 +821,6 @@ export default function App() {
         workspaces={workspaces}
         currentWorkspaceId={workspaceId}
         onSelectWorkspace={(id) => {
-          if (!confirmDiscard()) return;
           handleDirtyChange(false);
           void loadTree(id);
         }}
@@ -602,41 +842,40 @@ export default function App() {
                 canPaste={clipboard !== null}
                 requestActions={{
                   onRename: promptRenameRequest,
-                  onCopy: (cid, rid) => {
-                    const request = findRequest(cid, rid);
+                  onCopy: (cid, fp, rid) => {
+                    const request = findRequest(cid, fp, rid);
                     if (request) setClipboard(structuredClone(request));
                   },
-                  onDuplicate: (cid, rid) => {
-                    const request = findRequest(cid, rid);
+                  onDuplicate: (cid, fp, rid) => {
+                    const request = findRequest(cid, fp, rid);
                     if (request) {
-                      void copyRequestInto(cid, request, `${request.name} copy`);
+                      void copyRequestInto(cid, fp, request, `${request.name} copy`);
                     }
                   },
-                  onDelete: (cid, rid) => {
-                    const request = findRequest(cid, rid);
-                    if (request) void deleteRequestAction(cid, request);
+                  onDelete: (cid, fp, rid) => {
+                    const request = findRequest(cid, fp, rid);
+                    if (request) void deleteRequestAction(cid, fp, request);
                   },
                 }}
-                collectionActions={{
+                nodeActions={{
                   onNewRequest: promptNewRequest,
-                  onRename: promptRenameCollection,
-                  onPasteRequest: (cid) => {
+                  onNewFolder: promptNewFolder,
+                  onRename: promptRenameNode,
+                  onPasteRequest: (cid, fp) => {
                     if (clipboard) {
-                      void copyRequestInto(cid, clipboard, clipboard.name);
+                      void copyRequestInto(cid, fp, clipboard, clipboard.name);
                     }
                   },
                   onImportCurl: promptImportCurl,
-                  onDelete: (cid) => {
-                    const collection = tree.collections.find(
-                      (c) => c.id === cid
-                    );
-                    if (collection) void deleteCollectionAction(collection);
-                  },
+                  onDelete: deleteNode,
                 }}
-                onSelect={selectGuarded}
+                onMoveRequest={moveRequestAction}
+                onMoveFolder={moveFolderAction}
+                onSelect={selectItem}
                 onNewCollection={promptNewCollection}
                 onNewEnvironment={promptNewEnvironment}
-                onImportPostman={importPostman}
+                onImportFile={importPostman}
+                onImportFolder={importPostmanFolder}
               />
               <div
                 className="sidebar-resizer"

@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import cors from 'cors';
@@ -7,6 +8,7 @@ import express, {
   type Request,
   type Response,
 } from 'express';
+import { attachLiveSessions } from './liveSessions.js';
 import { registerMcp } from './mcp.js';
 import { router } from './router.js';
 import { HttpError } from './workspaceFs.js';
@@ -45,6 +47,11 @@ app.use(
   }
 );
 
-app.listen(PORT, () => {
+// Explicit HTTP server so the live channel (WebSocket/Socket.IO/MCP) can attach
+// to the same port via the HTTP upgrade event at /live.
+const server = http.createServer(app);
+attachLiveSessions(server);
+
+server.listen(PORT, () => {
   console.log(`API Notebook server listening on http://localhost:${PORT}`);
 });

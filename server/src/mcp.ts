@@ -5,7 +5,7 @@ import { z } from 'zod';
 import * as appData from './appData.js';
 import * as cookies from './cookies.js';
 import { applyEnvChanges, runRequest } from './execute.js';
-import { importPostmanFile } from './importer.js';
+import { importPostmanDir, importPostmanFile } from './importer.js';
 import type { ApiRequest, WorkspaceMeta } from './types.js';
 import * as wsfs from './workspaceFs.js';
 
@@ -90,9 +90,49 @@ const auth = z.object({
     .optional(),
 });
 const graphql = z.object({ query: z.string(), variables: z.string() });
+/** A request/folder's location inside a collection: folder slugs, outer→inner. */
+const folderPath = z.array(z.string()).default([]);
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Args = any;
+
+interface NodeSummary {
+  id?: string;
+  name?: string;
+  folders: NodeSummary[];
+  requests: { id: string; name: string; type: string; method: string; url: string }[];
+}
+
+/** Compact, recursive view of a collection/folder's requests and subfolders. */
+function summarizeNode(node: {
+  folders: import('./types.js').Folder[];
+  requests: ApiRequest[];
+}): NodeSummary {
+  return {
+    requests: node.requests.map((r) => ({
+      id: r.id,
+      name: r.name,
+      type: r.type,
+      method: r.method,
+      url: r.url,
+    })),
+    folders: node.folders.map((f) => ({
+      id: f.id,
+      name: f.name,
+      ...summarizeNode(f),
+    })),
+  };
+}
+
+function countRequests(node: {
+  folders: import('./types.js').Folder[];
+  requests: ApiRequest[];
+}): number {
+  return (
+    node.requests.length +
+    node.folders.reduce((sum, f) => sum + countRequests(f), 0)
+  );
+}
 
 function buildServer(): McpServer {
   const server = new McpServer({ name: 'api-notebook', version: '0.1.0' });
@@ -152,13 +192,7 @@ function buildServer(): McpServer {
           id: c.id,
           name: c.name,
           description: c.description,
-          requests: c.requests.map((r) => ({
-            id: r.id,
-            name: r.name,
-            type: r.type,
-            method: r.method,
-            url: r.url,
-          })),
+          ...summarizeNode(c),
         })),
         environments: tree.environments.map((e) => ({
           id: e.id,
@@ -173,16 +207,18 @@ function buildServer(): McpServer {
   reg(
     'get_request',
     {
-      description: 'Get a request in full (method, url, params, headers, auth, body, scripts, docs).',
+      description:
+        'Get a request in full (method, url, params, headers, auth, body, scripts, docs). Pass folderPath (folder slugs from the tree) when the request lives inside a folder.',
       inputSchema: {
         workspaceId: z.string(),
         collectionId: z.string(),
+        folderPath,
         requestId: z.string(),
       },
       annotations: readonly,
     },
-    ({ workspaceId, collectionId, requestId }: Args) =>
-      wsfs.getRequest(resolveWorkspace(workspaceId), collectionId, requestId)
+    ({ workspaceId, collectionId, folderPath: fp, requestId }: Args) =>
+      wsfs.getRequest(resolveWorkspace(workspaceId), collectionId, fp ?? [], requestId)
   );
 
   reg(
@@ -199,13 +235,7 @@ function buildServer(): McpServer {
         name: c.name,
         description: c.description,
         scripts: c.scripts,
-        requests: c.requests.map((r) => ({
-          id: r.id,
-          name: r.name,
-          type: r.type,
-          method: r.method,
-          url: r.url,
-        })),
+        ...summarizeNode(c),
       };
     }
   );
@@ -267,18 +297,57 @@ function buildServer(): McpServer {
   );
 
   reg(
-    'create_request',
+    'create_folder',
     {
-      description: 'Create a new request in a collection. Returns the created request.',
+      description:
+        'Create a folder inside a collection (pass folderPath to nest it inside an existing folder; omit or [] for the collection root). Returns the created folder.',
       inputSchema: {
         workspaceId: z.string(),
         collectionId: z.string(),
+        folderPath,
+        name: z.string(),
+      },
+    },
+    ({ workspaceId, collectionId, folderPath: fp, name }: Args) =>
+      wsfs.createFolder(resolveWorkspace(workspaceId), collectionId, fp ?? [], name)
+  );
+
+  reg(
+    'update_folder',
+    {
+      description:
+        "Update a folder's name, description, or folder-level scripts (which run around every request inside it).",
+      inputSchema: {
+        workspaceId: z.string(),
+        collectionId: z.string(),
+        folderPath,
+        name: z.string().optional(),
+        description: z.string().optional(),
+        scripts: scripts.optional(),
+      },
+    },
+    ({ workspaceId, collectionId, folderPath: fp, name, description, scripts: s }: Args) => {
+      const ws = resolveWorkspace(workspaceId);
+      wsfs.updateFolder(ws, collectionId, fp ?? [], { name, description, scripts: s });
+      return wsfs.getCollection(ws, collectionId);
+    }
+  );
+
+  reg(
+    'create_request',
+    {
+      description:
+        'Create a new request in a collection (optionally inside a folder via folderPath). Returns the created request.',
+      inputSchema: {
+        workspaceId: z.string(),
+        collectionId: z.string(),
+        folderPath,
         name: z.string(),
         type: z.enum(['http', 'graphql']).default('http'),
       },
     },
-    ({ workspaceId, collectionId, name, type }: Args) =>
-      wsfs.createRequest(resolveWorkspace(workspaceId), collectionId, name, type)
+    ({ workspaceId, collectionId, folderPath: fp, name, type }: Args) =>
+      wsfs.createRequest(resolveWorkspace(workspaceId), collectionId, fp ?? [], name, type)
   );
 
   reg(
@@ -289,6 +358,7 @@ function buildServer(): McpServer {
       inputSchema: {
         workspaceId: z.string(),
         collectionId: z.string(),
+        folderPath,
         requestId: z.string(),
         name: z.string().optional(),
         method: z.enum(METHODS).optional(),
@@ -304,7 +374,8 @@ function buildServer(): McpServer {
     },
     (a: Args) => {
       const ws = resolveWorkspace(a.workspaceId);
-      const existing = wsfs.getRequest(ws, a.collectionId, a.requestId);
+      const fp = a.folderPath ?? [];
+      const existing = wsfs.getRequest(ws, a.collectionId, fp, a.requestId);
       const merged: ApiRequest = {
         ...existing,
         ...(a.name !== undefined && { name: a.name }),
@@ -318,8 +389,55 @@ function buildServer(): McpServer {
         ...(a.docs !== undefined && { docs: a.docs }),
         ...(a.scripts !== undefined && { scripts: a.scripts }),
       };
-      wsfs.updateRequest(ws, a.collectionId, a.requestId, merged);
-      return wsfs.getRequest(ws, a.collectionId, a.requestId);
+      wsfs.updateRequest(ws, a.collectionId, fp, a.requestId, merged);
+      return wsfs.getRequest(ws, a.collectionId, fp, a.requestId);
+    }
+  );
+
+  reg(
+    'move_request',
+    {
+      description:
+        'Move a request into another folder or collection. folderPath/toFolderPath are folder slugs (omit or [] for a collection root); toCollectionId defaults to the source collection. Returns the new location (the id may change if it collided).',
+      inputSchema: {
+        workspaceId: z.string(),
+        collectionId: z.string(),
+        folderPath,
+        requestId: z.string(),
+        toCollectionId: z.string().optional(),
+        toFolderPath: z.array(z.string()).default([]),
+      },
+    },
+    (a: Args) => {
+      const ws = resolveWorkspace(a.workspaceId);
+      return wsfs.moveRequest(
+        ws,
+        { collectionId: a.collectionId, folderPath: a.folderPath ?? [], requestId: a.requestId },
+        { collectionId: a.toCollectionId ?? a.collectionId, folderPath: a.toFolderPath ?? [] }
+      );
+    }
+  );
+
+  reg(
+    'move_folder',
+    {
+      description:
+        'Move a folder (with everything inside it) under a new parent folder or collection. Cannot move a folder into itself or its own subfolder. Returns the new folder path.',
+      inputSchema: {
+        workspaceId: z.string(),
+        collectionId: z.string(),
+        folderPath,
+        toCollectionId: z.string().optional(),
+        toFolderPath: z.array(z.string()).default([]),
+      },
+    },
+    (a: Args) => {
+      const ws = resolveWorkspace(a.workspaceId);
+      return wsfs.moveFolder(
+        ws,
+        { collectionId: a.collectionId, folderPath: a.folderPath ?? [] },
+        { collectionId: a.toCollectionId ?? a.collectionId, folderPath: a.toFolderPath ?? [] }
+      );
     }
   );
 
@@ -333,13 +451,15 @@ function buildServer(): McpServer {
       inputSchema: {
         workspaceId: z.string(),
         collectionId: z.string(),
+        folderPath,
         requestId: z.string(),
       },
     },
-    async ({ workspaceId, collectionId, requestId }: Args) => {
+    async ({ workspaceId, collectionId, folderPath: fp, requestId }: Args) => {
       const ws = resolveWorkspace(workspaceId);
-      const request = wsfs.getRequest(ws, collectionId, requestId);
-      const collectionScripts = wsfs.getCollectionScripts(ws, collectionId);
+      const path = fp ?? [];
+      const request = wsfs.getRequest(ws, collectionId, path, requestId);
+      const collectionScripts = wsfs.getScriptChain(ws, collectionId, path);
       const activeId = appData.getActiveEnvironmentId(ws.id);
       const env = activeId ? wsfs.getEnvironment(ws, activeId) : undefined;
       const jar = cookies.loadJar(ws.id);
@@ -351,6 +471,7 @@ function buildServer(): McpServer {
           variables: applyEnvChanges(env, outcome.envVars, outcome.changedEnvKeys),
         });
       }
+      wsfs.saveResponse(ws, collectionId, path, requestId, outcome.result);
       const r = outcome.result;
       const truncated = r.body.length > MAX_BODY_CHARS;
       return {
@@ -451,6 +572,17 @@ function buildServer(): McpServer {
       importPostmanFile(resolveWorkspace(workspaceId), path)
   );
 
+  reg(
+    'import_postman_dir',
+    {
+      description:
+        'Batch-import every Postman collection/environment export found under a folder on this machine (recursively). Unrecognised or unparseable JSON files are skipped. Returns aggregate counts.',
+      inputSchema: { workspaceId: z.string(), path: z.string() },
+    },
+    ({ workspaceId, path }: Args) =>
+      importPostmanDir(resolveWorkspace(workspaceId), path)
+  );
+
   // ---- destructive ----
 
   reg(
@@ -461,21 +593,23 @@ function buildServer(): McpServer {
       inputSchema: {
         workspaceId: z.string(),
         collectionId: z.string(),
+        folderPath,
         requestId: z.string(),
         confirm: z.boolean().default(false),
       },
       annotations: destructive,
     },
-    ({ workspaceId, collectionId, requestId, confirm }: Args) => {
+    ({ workspaceId, collectionId, folderPath: fp, requestId, confirm }: Args) => {
       const ws = resolveWorkspace(workspaceId);
-      const req = wsfs.getRequest(ws, collectionId, requestId);
+      const path = fp ?? [];
+      const req = wsfs.getRequest(ws, collectionId, path, requestId);
       if (!confirm) {
         return needsConfirmation(
           `Delete request "${req.name}" (${req.method})? This cannot be undone.`,
-          { tool: 'delete_request', workspaceId, collectionId, requestId }
+          { tool: 'delete_request', workspaceId, collectionId, folderPath: path, requestId }
         );
       }
-      wsfs.deleteRequest(ws, collectionId, requestId);
+      wsfs.deleteRequest(ws, collectionId, path, requestId);
       return { deleted: requestId };
     }
   );
@@ -497,12 +631,47 @@ function buildServer(): McpServer {
       const col = wsfs.getCollection(ws, collectionId);
       if (!confirm) {
         return needsConfirmation(
-          `Delete collection "${col.name}" and its ${col.requests.length} request(s)? This cannot be undone.`,
+          `Delete collection "${col.name}" and its ${countRequests(col)} request(s)? This cannot be undone.`,
           { tool: 'delete_collection', workspaceId, collectionId }
         );
       }
       wsfs.deleteCollection(ws, collectionId);
       return { deleted: collectionId };
+    }
+  );
+
+  reg(
+    'delete_folder',
+    {
+      description:
+        'Delete a folder and everything inside it (subfolders and requests). This cannot be undone. Two-step: call without confirm to get a summary, then call again with confirm: true to actually delete.',
+      inputSchema: {
+        workspaceId: z.string(),
+        collectionId: z.string(),
+        folderPath,
+        confirm: z.boolean().default(false),
+      },
+      annotations: destructive,
+    },
+    ({ workspaceId, collectionId, folderPath: fp, confirm }: Args) => {
+      const ws = resolveWorkspace(workspaceId);
+      const path = fp ?? [];
+      if (path.length === 0) throw new Error('A folderPath is required');
+      const col = wsfs.getCollection(ws, collectionId);
+      let node: { folders: import('./types.js').Folder[] } = col;
+      for (const slug of path) {
+        const next = node.folders.find((f) => f.id === slug);
+        if (!next) throw new Error(`Folder "${path.join('/')}" not found`);
+        node = next;
+      }
+      if (!confirm) {
+        return needsConfirmation(
+          `Delete folder "${path.join('/')}" and its ${countRequests(node as never)} request(s)? This cannot be undone.`,
+          { tool: 'delete_folder', workspaceId, collectionId, folderPath: path }
+        );
+      }
+      wsfs.deleteFolder(ws, collectionId, path);
+      return { deleted: path.join('/') };
     }
   );
 

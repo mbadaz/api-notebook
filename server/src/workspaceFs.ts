@@ -6,13 +6,30 @@ import type {
   ApiRequest,
   Collection,
   Environment,
+  ExecutionResult,
+  Folder,
   RequestType,
+  Scripts,
   WorkspaceMeta,
   WorkspaceTree,
 } from './types.js';
 
 const WORKSPACE_FILE = 'workspace.json';
+const FOLDER_FILE = 'folder.json';
+const COLLECTION_FILE = 'collection.json';
+/**
+ * Pre-folders workspaces stored a collection's requests in a `requests/`
+ * subdirectory. We still read that layout, but never write to it.
+ */
+const LEGACY_REQUESTS_DIR = 'requests';
+/** Suffix for the persisted response-history file kept beside each request. */
+const RESPONSE_SUFFIX = '.response.json';
+/** How many recent responses to keep per request (newest first). */
+const RESPONSE_HISTORY = 3;
+const emptyScripts = (): Scripts => ({ preRequest: '', postResponse: '' });
 const LOCAL_ENV_IGNORE = 'environments/*.local.json';
+/** Saved responses are a local cache (may hold tokens/PII) — never committed. */
+const RESPONSE_IGNORE = '*.response.json';
 
 export class HttpError extends Error {
   constructor(
@@ -63,14 +80,32 @@ function environmentsDir(ws: WorkspaceMeta): string {
 
 function collectionDir(ws: WorkspaceMeta, collectionId: string): string {
   const dir = path.join(collectionsDir(ws), collectionId);
-  if (!fs.existsSync(path.join(dir, 'collection.json'))) {
+  if (!fs.existsSync(path.join(dir, COLLECTION_FILE))) {
     throw new HttpError(404, `Collection "${collectionId}" not found`);
   }
   return dir;
 }
 
-function requestsDir(ws: WorkspaceMeta, collectionId: string): string {
-  return path.join(collectionDir(ws, collectionId), 'requests');
+/**
+ * Resolves the on-disk directory for a node (a collection root when folderPath
+ * is empty, or a nested folder), validating that each folder in the path exists.
+ */
+function nodeDir(
+  ws: WorkspaceMeta,
+  collectionId: string,
+  folderPath: string[]
+): string {
+  let dir = collectionDir(ws, collectionId);
+  for (const slug of folderPath) {
+    dir = path.join(dir, slug);
+    if (!fs.existsSync(path.join(dir, FOLDER_FILE))) {
+      throw new HttpError(
+        404,
+        `Folder "${folderPath.join('/')}" not found in collection "${collectionId}"`
+      );
+    }
+  }
+  return dir;
 }
 
 function listJsonFiles(dir: string): string[] {
@@ -88,6 +123,45 @@ function listDirs(dir: string): string[] {
     .filter((d) => d.isDirectory())
     .map((d) => d.name)
     .sort();
+}
+
+/** Names (without .json) of request files directly inside a node directory. */
+function requestIdsIn(dir: string): string[] {
+  return listJsonFiles(dir)
+    .filter(
+      (f) =>
+        f !== COLLECTION_FILE &&
+        f !== FOLDER_FILE &&
+        !f.endsWith(RESPONSE_SUFFIX)
+    )
+    .map((f) => f.replace(/\.json$/, ''));
+}
+
+/** Slugs of the subfolders inside a node directory (dirs holding a folder.json). */
+function subfolderSlugsIn(dir: string): string[] {
+  return listDirs(dir).filter((d) =>
+    fs.existsSync(path.join(dir, d, FOLDER_FILE))
+  );
+}
+
+/**
+ * Resolves the directory a request file lives in. Requests written by the
+ * current version sit directly in their node directory; older root-level
+ * requests may still live in a legacy `requests/` subdirectory.
+ */
+function requestFileDir(
+  ws: WorkspaceMeta,
+  collectionId: string,
+  folderPath: string[],
+  id: string
+): string {
+  const dir = nodeDir(ws, collectionId, folderPath);
+  if (fs.existsSync(path.join(dir, `${id}.json`))) return dir;
+  if (folderPath.length === 0) {
+    const legacy = path.join(dir, LEGACY_REQUESTS_DIR);
+    if (fs.existsSync(path.join(legacy, `${id}.json`))) return legacy;
+  }
+  return dir;
 }
 
 export function createWorkspace(name: string, dirPath: string): WorkspaceMeta {
@@ -116,6 +190,9 @@ export function createWorkspace(name: string, dirPath: string): WorkspaceMeta {
         '# Secret environment values — the shared environment files only',
         '# declare secret variable names; the values live here and stay local.',
         LOCAL_ENV_IGNORE,
+        '',
+        '# Saved responses are a local cache (may hold tokens/PII).',
+        RESPONSE_IGNORE,
         '',
         '# OS cruft',
         '.DS_Store',
@@ -151,10 +228,14 @@ function readRequest(
   const docs = fs.existsSync(docsFile)
     ? fs.readFileSync(docsFile, 'utf8')
     : '';
-  // Files written by older versions may predate newer body/script/graphql fields.
+  // Files written by older versions may predate newer body/script/graphql/
+  // websocket fields, so back-fill each sub-object with its defaults.
   const storedBody: Partial<ApiRequest['body']> = stored.body ?? {};
   const storedScripts: Partial<ApiRequest['scripts']> = stored.scripts ?? {};
   const storedGraphql: Partial<ApiRequest['graphql']> = stored.graphql ?? {};
+  const storedWebsocket: Partial<ApiRequest['websocket']> = stored.websocket ?? {};
+  const storedSocketio: Partial<ApiRequest['socketio']> = stored.socketio ?? {};
+  const storedMcp: Partial<ApiRequest['mcp']> = stored.mcp ?? {};
   return {
     ...stored,
     body: {
@@ -167,8 +248,54 @@ function readRequest(
     },
     scripts: { preRequest: '', postResponse: '', ...storedScripts },
     graphql: { query: '', variables: '', ...storedGraphql },
+    websocket: { url: '', subprotocols: '', messages: [], ...storedWebsocket },
+    socketio: {
+      url: '',
+      path: '',
+      auth: '',
+      query: [],
+      emitEvents: [],
+      listenEvents: [],
+      ...storedSocketio,
+    },
+    mcp: { url: '', ...storedMcp },
     id,
     docs,
+  };
+}
+
+/** Reads the requests and subfolders contained directly in a node directory. */
+function readNodeChildren(dir: string): {
+  folders: Folder[];
+  requests: ApiRequest[];
+} {
+  const requests = requestIdsIn(dir).map((id) => readRequest(dir, id));
+  // Older root-level requests may still live in a legacy `requests/` subdir.
+  const legacy = path.join(dir, LEGACY_REQUESTS_DIR);
+  if (!fs.existsSync(path.join(legacy, FOLDER_FILE))) {
+    for (const id of requestIdsIn(legacy)) requests.push(readRequest(legacy, id));
+  }
+  requests.sort((a, b) => a.id.localeCompare(b.id));
+  const folders = subfolderSlugsIn(dir).map((slug) =>
+    readFolder(path.join(dir, slug), slug)
+  );
+  return { folders, requests };
+}
+
+function readFolder(dir: string, id: string): Folder {
+  const meta = readJson<{
+    name: string;
+    description?: string;
+    scripts?: Partial<Scripts>;
+  }>(path.join(dir, FOLDER_FILE));
+  const { folders, requests } = readNodeChildren(dir);
+  return {
+    id,
+    name: meta.name,
+    description: meta.description ?? '',
+    scripts: { ...emptyScripts(), ...meta.scripts },
+    folders,
+    requests,
   };
 }
 
@@ -177,17 +304,15 @@ function readCollection(ws: WorkspaceMeta, id: string): Collection {
   const meta = readJson<{
     name: string;
     description?: string;
-    scripts?: Partial<Collection['scripts']>;
-  }>(path.join(dir, 'collection.json'));
-  const reqDir = path.join(dir, 'requests');
-  const requests = listJsonFiles(reqDir).map((f) =>
-    readRequest(reqDir, f.replace(/\.json$/, ''))
-  );
+    scripts?: Partial<Scripts>;
+  }>(path.join(dir, COLLECTION_FILE));
+  const { folders, requests } = readNodeChildren(dir);
   return {
     id,
     name: meta.name,
     description: meta.description ?? '',
-    scripts: { preRequest: '', postResponse: '', ...meta.scripts },
+    scripts: { ...emptyScripts(), ...meta.scripts },
+    folders,
     requests,
   };
 }
@@ -225,7 +350,7 @@ export function readTree(
 ): WorkspaceTree {
   const collections = listDirs(collectionsDir(ws))
     .filter((d) =>
-      fs.existsSync(path.join(collectionsDir(ws), d, 'collection.json'))
+      fs.existsSync(path.join(collectionsDir(ws), d, COLLECTION_FILE))
     )
     .map((d) => readCollection(ws, d));
   const environments = listJsonFiles(environmentsDir(ws))
@@ -244,10 +369,10 @@ export function createCollection(ws: WorkspaceMeta, name: string): Collection {
   const taken = new Set(listDirs(collectionsDir(ws)));
   const id = uniqueSlug(slugify(name), taken);
   const dir = path.join(collectionsDir(ws), id);
-  const scripts = { preRequest: '', postResponse: '' };
-  fs.mkdirSync(path.join(dir, 'requests'), { recursive: true });
-  writeJson(path.join(dir, 'collection.json'), { name, description: '', scripts });
-  return { id, name, description: '', scripts, requests: [] };
+  const scripts = emptyScripts();
+  fs.mkdirSync(dir, { recursive: true });
+  writeJson(path.join(dir, COLLECTION_FILE), { name, description: '', scripts });
+  return { id, name, description: '', scripts, folders: [], requests: [] };
 }
 
 export function updateCollection(
@@ -255,17 +380,16 @@ export function updateCollection(
   id: string,
   changes: { name?: string; description?: string; scripts?: Collection['scripts'] }
 ): void {
-  const file = path.join(collectionDir(ws, id), 'collection.json');
+  const file = path.join(collectionDir(ws, id), COLLECTION_FILE);
   const meta = readJson<{
     name: string;
     description?: string;
-    scripts?: Collection['scripts'];
+    scripts?: Scripts;
   }>(file);
   writeJson(file, {
     name: changes.name ?? meta.name,
     description: changes.description ?? meta.description ?? '',
-    scripts: changes.scripts ??
-      meta.scripts ?? { preRequest: '', postResponse: '' },
+    scripts: changes.scripts ?? meta.scripts ?? emptyScripts(),
   });
 }
 
@@ -273,26 +397,104 @@ export function deleteCollection(ws: WorkspaceMeta, id: string): void {
   fs.rmSync(collectionDir(ws, id), { recursive: true, force: true });
 }
 
-export function getCollectionScripts(
-  ws: WorkspaceMeta,
-  id: string
-): Collection['scripts'] {
-  const file = path.join(collectionDir(ws, id), 'collection.json');
-  if (!fs.existsSync(file)) return { preRequest: '', postResponse: '' };
-  const meta = readJson<{ scripts?: Partial<Collection['scripts']> }>(file);
-  return { preRequest: '', postResponse: '', ...meta.scripts };
-}
-
 export function getCollection(ws: WorkspaceMeta, id: string): Collection {
   return readCollection(ws, id);
+}
+
+// ----- folders -----
+
+export function createFolder(
+  ws: WorkspaceMeta,
+  collectionId: string,
+  parentPath: string[],
+  name: string
+): Folder {
+  const parent = nodeDir(ws, collectionId, parentPath);
+  const taken = new Set(subfolderSlugsIn(parent));
+  const id = uniqueSlug(slugify(name), taken);
+  const dir = path.join(parent, id);
+  const scripts = emptyScripts();
+  fs.mkdirSync(dir, { recursive: true });
+  writeJson(path.join(dir, FOLDER_FILE), { name, description: '', scripts });
+  return { id, name, description: '', scripts, folders: [], requests: [] };
+}
+
+export function updateFolder(
+  ws: WorkspaceMeta,
+  collectionId: string,
+  folderPath: string[],
+  changes: { name?: string; description?: string; scripts?: Scripts }
+): void {
+  if (folderPath.length === 0) {
+    throw new HttpError(400, 'A folder path is required');
+  }
+  const dir = nodeDir(ws, collectionId, folderPath);
+  const file = path.join(dir, FOLDER_FILE);
+  const meta = readJson<{
+    name: string;
+    description?: string;
+    scripts?: Scripts;
+  }>(file);
+  writeJson(file, {
+    name: changes.name ?? meta.name,
+    description: changes.description ?? meta.description ?? '',
+    scripts: changes.scripts ?? meta.scripts ?? emptyScripts(),
+  });
+}
+
+export function deleteFolder(
+  ws: WorkspaceMeta,
+  collectionId: string,
+  folderPath: string[]
+): void {
+  if (folderPath.length === 0) {
+    throw new HttpError(400, 'A folder path is required');
+  }
+  fs.rmSync(nodeDir(ws, collectionId, folderPath), {
+    recursive: true,
+    force: true,
+  });
+}
+
+/**
+ * Combines the pre-request/post-response scripts that wrap a request: the
+ * collection's, then each folder's down the path. Postman runs these outer →
+ * inner around every request.
+ */
+export function getScriptChain(
+  ws: WorkspaceMeta,
+  collectionId: string,
+  folderPath: string[]
+): Scripts {
+  const chain = emptyScripts();
+  const append = (file: string) => {
+    if (!fs.existsSync(file)) return;
+    const meta = readJson<{ scripts?: Partial<Scripts> }>(file);
+    const s = { ...emptyScripts(), ...meta.scripts };
+    chain.preRequest = joinScripts(chain.preRequest, s.preRequest);
+    chain.postResponse = joinScripts(chain.postResponse, s.postResponse);
+  };
+  let dir = collectionDir(ws, collectionId);
+  append(path.join(dir, COLLECTION_FILE));
+  for (const slug of folderPath) {
+    dir = path.join(dir, slug);
+    append(path.join(dir, FOLDER_FILE));
+  }
+  return chain;
+}
+
+function joinScripts(a: string, b: string): string {
+  if (a.trim() && b.trim()) return `${a}\n\n${b}`;
+  return a.trim() ? a : b;
 }
 
 export function getRequest(
   ws: WorkspaceMeta,
   collectionId: string,
+  folderPath: string[],
   id: string
 ): ApiRequest {
-  const dir = requestsDir(ws, collectionId);
+  const dir = requestFileDir(ws, collectionId, folderPath, id);
   if (!fs.existsSync(path.join(dir, `${id}.json`))) {
     throw new HttpError(404, `Request "${id}" not found`);
   }
@@ -315,6 +517,9 @@ export function defaultRequest(
     auth: { type: 'none' },
     body: { mode: 'none', content: '', form: [], formData: [], binaryPath: '' },
     graphql: { query: '', variables: '' },
+    websocket: { url: '', subprotocols: '', messages: [] },
+    socketio: { url: '', path: '', auth: '', query: [], emitEvents: [], listenEvents: [] },
+    mcp: { url: '' },
     docs: '',
     scripts: { preRequest: '', postResponse: '' },
   };
@@ -323,13 +528,19 @@ export function defaultRequest(
 export function createRequest(
   ws: WorkspaceMeta,
   collectionId: string,
+  folderPath: string[],
   name: string,
   type: RequestType
 ): ApiRequest {
-  const dir = requestsDir(ws, collectionId);
-  const taken = new Set(
-    listJsonFiles(dir).map((f) => f.replace(/\.json$/, ''))
-  );
+  const dir = nodeDir(ws, collectionId, folderPath);
+  const taken = new Set(requestIdsIn(dir));
+  // Avoid colliding with a root-level request still in the legacy requests/ dir.
+  if (folderPath.length === 0) {
+    const legacy = path.join(dir, LEGACY_REQUESTS_DIR);
+    if (!fs.existsSync(path.join(legacy, FOLDER_FILE))) {
+      for (const legacyId of requestIdsIn(legacy)) taken.add(legacyId);
+    }
+  }
   const id = uniqueSlug(slugify(name), taken);
   const request = defaultRequest(id, name, type);
   writeRequestFiles(dir, request);
@@ -350,10 +561,11 @@ function writeRequestFiles(dir: string, request: ApiRequest): void {
 export function updateRequest(
   ws: WorkspaceMeta,
   collectionId: string,
+  folderPath: string[],
   id: string,
   request: ApiRequest
 ): void {
-  const dir = requestsDir(ws, collectionId);
+  const dir = requestFileDir(ws, collectionId, folderPath, id);
   if (!fs.existsSync(path.join(dir, `${id}.json`))) {
     throw new HttpError(404, `Request "${id}" not found`);
   }
@@ -363,11 +575,153 @@ export function updateRequest(
 export function deleteRequest(
   ws: WorkspaceMeta,
   collectionId: string,
+  folderPath: string[],
   id: string
 ): void {
-  const dir = requestsDir(ws, collectionId);
+  const dir = requestFileDir(ws, collectionId, folderPath, id);
   fs.rmSync(path.join(dir, `${id}.json`), { force: true });
   fs.rmSync(path.join(dir, `${id}.md`), { force: true });
+  fs.rmSync(path.join(dir, `${id}${RESPONSE_SUFFIX}`), { force: true });
+}
+
+// ----- persisted response history -----
+
+/**
+ * Saves a response into the request's history (newest first, capped at
+ * RESPONSE_HISTORY). The history is a local cache beside the request file and
+ * is never committed (see RESPONSE_IGNORE). No-ops if the request file is gone.
+ */
+export function saveResponse(
+  ws: WorkspaceMeta,
+  collectionId: string,
+  folderPath: string[],
+  id: string,
+  result: ExecutionResult
+): void {
+  const dir = requestFileDir(ws, collectionId, folderPath, id);
+  if (!fs.existsSync(path.join(dir, `${id}.json`))) return;
+  const file = path.join(dir, `${id}${RESPONSE_SUFFIX}`);
+  const entry: ExecutionResult = { ...result, savedAt: new Date().toISOString() };
+  const history = [entry, ...readResponseHistory(file)].slice(0, RESPONSE_HISTORY);
+  writeJson(file, history);
+  ensureIgnored(ws, RESPONSE_IGNORE, 'Saved responses stay local');
+}
+
+function readResponseHistory(file: string): ExecutionResult[] {
+  if (!fs.existsSync(file)) return [];
+  try {
+    const data = readJson<unknown>(file);
+    return Array.isArray(data) ? (data as ExecutionResult[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function getResponses(
+  ws: WorkspaceMeta,
+  collectionId: string,
+  folderPath: string[],
+  id: string
+): ExecutionResult[] {
+  const dir = requestFileDir(ws, collectionId, folderPath, id);
+  return readResponseHistory(path.join(dir, `${id}${RESPONSE_SUFFIX}`));
+}
+
+// ----- move (reparent) -----
+
+export interface RequestLocation {
+  collectionId: string;
+  folderPath: string[];
+  requestId: string;
+}
+
+export interface FolderLocation {
+  collectionId: string;
+  folderPath: string[];
+}
+
+/** Request ids already taken in a node (incl. a legacy requests/ dir at root). */
+function takenRequestIds(dir: string, isRoot: boolean): Set<string> {
+  const taken = new Set(requestIdsIn(dir));
+  if (isRoot) {
+    const legacy = path.join(dir, LEGACY_REQUESTS_DIR);
+    if (!fs.existsSync(path.join(legacy, FOLDER_FILE))) {
+      for (const id of requestIdsIn(legacy)) taken.add(id);
+    }
+  }
+  return taken;
+}
+
+/**
+ * Moves a request (its .json and any .md sibling) into another node, possibly
+ * in another collection. The slug is kept unless it collides at the
+ * destination, in which case it is uniquified. Returns the new location.
+ */
+export function moveRequest(
+  ws: WorkspaceMeta,
+  from: RequestLocation,
+  to: FolderLocation
+): RequestLocation {
+  const srcDir = requestFileDir(ws, from.collectionId, from.folderPath, from.requestId);
+  const srcJson = path.join(srcDir, `${from.requestId}.json`);
+  if (!fs.existsSync(srcJson)) {
+    throw new HttpError(404, `Request "${from.requestId}" not found`);
+  }
+  const destDir = nodeDir(ws, to.collectionId, to.folderPath);
+  if (path.resolve(srcDir) === path.resolve(destDir)) {
+    return { ...to, requestId: from.requestId };
+  }
+  const newId = uniqueSlug(
+    from.requestId,
+    takenRequestIds(destDir, to.folderPath.length === 0)
+  );
+  fs.renameSync(srcJson, path.join(destDir, `${newId}.json`));
+  const srcMd = path.join(srcDir, `${from.requestId}.md`);
+  if (fs.existsSync(srcMd)) {
+    fs.renameSync(srcMd, path.join(destDir, `${newId}.md`));
+  }
+  const srcResp = path.join(srcDir, `${from.requestId}${RESPONSE_SUFFIX}`);
+  if (fs.existsSync(srcResp)) {
+    fs.renameSync(srcResp, path.join(destDir, `${newId}${RESPONSE_SUFFIX}`));
+  }
+  return { ...to, requestId: newId };
+}
+
+/**
+ * Moves a folder (with everything inside it) under a new parent, possibly in
+ * another collection. Rejects moving a folder into itself or a descendant.
+ * Returns the new folder path.
+ */
+export function moveFolder(
+  ws: WorkspaceMeta,
+  from: FolderLocation,
+  to: FolderLocation
+): FolderLocation {
+  if (from.folderPath.length === 0) {
+    throw new HttpError(400, 'No folder to move');
+  }
+  const srcDir = nodeDir(ws, from.collectionId, from.folderPath);
+  const parentPath = from.folderPath.slice(0, -1);
+
+  if (from.collectionId === to.collectionId) {
+    // Into the same parent — nothing to do.
+    if (parentPath.join('/') === to.folderPath.join('/')) return from;
+    // Into itself or one of its own descendants — not allowed.
+    const fromKey = from.folderPath.join('/');
+    const destKey = to.folderPath.slice(0, from.folderPath.length).join('/');
+    if (
+      to.folderPath.length >= from.folderPath.length &&
+      destKey === fromKey
+    ) {
+      throw new HttpError(400, 'Cannot move a folder into itself or its own subfolder');
+    }
+  }
+
+  const destParent = nodeDir(ws, to.collectionId, to.folderPath);
+  const slug = from.folderPath[from.folderPath.length - 1];
+  const newSlug = uniqueSlug(slug, new Set(subfolderSlugsIn(destParent)));
+  fs.renameSync(srcDir, path.join(destParent, newSlug));
+  return { collectionId: to.collectionId, folderPath: [...to.folderPath, newSlug] };
 }
 
 export function createEnvironment(ws: WorkspaceMeta, name: string): Environment {
@@ -390,21 +744,18 @@ export function getEnvironment(
 }
 
 /**
- * Make sure the workspace's .gitignore excludes <env>.local.json files,
- * so secret values can never be committed by accident. Appends the rule
- * to workspaces created before this feature existed.
+ * Make sure the workspace's .gitignore contains a pattern, appending it (with a
+ * comment) when missing. Used to keep local-only artifacts — secret env values
+ * and saved responses — out of Git even in workspaces created before the
+ * feature existed.
  */
-function ensureLocalEnvIgnored(ws: WorkspaceMeta): void {
+function ensureIgnored(ws: WorkspaceMeta, pattern: string, comment: string): void {
   const file = path.join(ws.path, '.gitignore');
   const existing = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
   const lines = existing.split('\n').map((l) => l.trim());
-  if (lines.includes(LOCAL_ENV_IGNORE) || lines.includes(`/${LOCAL_ENV_IGNORE}`)) {
-    return;
-  }
-  const block = `# Secret environment values stay local\n${LOCAL_ENV_IGNORE}\n`;
-  const content = existing
-    ? existing.replace(/\n*$/, '\n\n') + block
-    : block;
+  if (lines.includes(pattern) || lines.includes(`/${pattern}`)) return;
+  const block = `# ${comment}\n${pattern}\n`;
+  const content = existing ? existing.replace(/\n*$/, '\n\n') + block : block;
   fs.writeFileSync(file, content);
 }
 
@@ -428,7 +779,7 @@ export function updateEnvironment(
     writeJson(localEnvFile(ws, id), {
       values: Object.fromEntries(secrets.map((v) => [v.key, v.value])),
     });
-    ensureLocalEnvIgnored(ws);
+    ensureIgnored(ws, LOCAL_ENV_IGNORE, 'Secret environment values stay local');
   } else {
     fs.rmSync(localEnvFile(ws, id), { force: true });
   }

@@ -99,7 +99,9 @@ export function Sidebar({
   onImportFile,
   onImportFolder,
 }: Props) {
-  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  // Tracks which collections/folders are expanded; absent keys are collapsed
+  // (the default), so the tree opens collapsed.
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [importMenu, setImportMenu] = useState<{ x: number; y: number } | null>(null);
   const [drag, setDrag] = useState<DragItem | null>(null);
@@ -109,7 +111,7 @@ export function Sidebar({
     JSON.stringify(sel) === JSON.stringify(selection);
 
   const toggle = (key: string) =>
-    setCollapsed((c) => ({ ...c, [key]: !c[key] }));
+    setExpanded((c) => ({ ...c, [key]: !c[key] }));
 
   /** Whether the dragged item may drop into the given node (not a no-op/cycle). */
   function canDrop(item: DragItem, cid: string, folderPath: string[]): boolean {
@@ -286,7 +288,7 @@ export function Sidebar({
           {...dropTarget(collectionId, folderPath, key)}
         >
           <button className="icon-btn chevron" onClick={() => toggle(key)}>
-            {collapsed[key] ? '▸' : '▾'}
+            {expanded[key] ? '▾' : '▸'}
           </button>
           <button className="row-label" onClick={() => onSelect(sel)}>
             <span className="folder-tag">▥</span>
@@ -300,7 +302,7 @@ export function Sidebar({
             ⋯
           </button>
         </div>
-        {!collapsed[key] &&
+        {expanded[key] &&
           renderChildren(collectionId, folderPath, folder, depth + 1)}
       </div>
     );
@@ -330,7 +332,7 @@ export function Sidebar({
       <div key={collection.id}>
         <div className={cls} {...dropTarget(collection.id, [], key)}>
           <button className="icon-btn chevron" onClick={() => toggle(key)}>
-            {collapsed[key] ? '▸' : '▾'}
+            {expanded[key] ? '▾' : '▸'}
           </button>
           <button
             className="row-label"
@@ -355,7 +357,7 @@ export function Sidebar({
             ⋯
           </button>
         </div>
-        {!collapsed[key] && renderChildren(collection.id, [], collection, 1)}
+        {expanded[key] && renderChildren(collection.id, [], collection, 1)}
       </div>
     );
   }

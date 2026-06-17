@@ -394,6 +394,53 @@ function buildServer(): McpServer {
     }
   );
 
+  reg(
+    'move_request',
+    {
+      description:
+        'Move a request into another folder or collection. folderPath/toFolderPath are folder slugs (omit or [] for a collection root); toCollectionId defaults to the source collection. Returns the new location (the id may change if it collided).',
+      inputSchema: {
+        workspaceId: z.string(),
+        collectionId: z.string(),
+        folderPath,
+        requestId: z.string(),
+        toCollectionId: z.string().optional(),
+        toFolderPath: z.array(z.string()).default([]),
+      },
+    },
+    (a: Args) => {
+      const ws = resolveWorkspace(a.workspaceId);
+      return wsfs.moveRequest(
+        ws,
+        { collectionId: a.collectionId, folderPath: a.folderPath ?? [], requestId: a.requestId },
+        { collectionId: a.toCollectionId ?? a.collectionId, folderPath: a.toFolderPath ?? [] }
+      );
+    }
+  );
+
+  reg(
+    'move_folder',
+    {
+      description:
+        'Move a folder (with everything inside it) under a new parent folder or collection. Cannot move a folder into itself or its own subfolder. Returns the new folder path.',
+      inputSchema: {
+        workspaceId: z.string(),
+        collectionId: z.string(),
+        folderPath,
+        toCollectionId: z.string().optional(),
+        toFolderPath: z.array(z.string()).default([]),
+      },
+    },
+    (a: Args) => {
+      const ws = resolveWorkspace(a.workspaceId);
+      return wsfs.moveFolder(
+        ws,
+        { collectionId: a.collectionId, folderPath: a.folderPath ?? [] },
+        { collectionId: a.toCollectionId ?? a.collectionId, folderPath: a.toFolderPath ?? [] }
+      );
+    }
+  );
+
   // ---- execute ----
 
   reg(

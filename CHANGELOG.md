@@ -16,6 +16,8 @@ See [RELEASING.md](RELEASING.md) for the release process.
   preserve their folder structure instead of flattening it into separate
   collections. On disk, folders are mirrored as nested directories; pre-folders
   workspaces still load (their requests appear at the collection root).
+- **Drag-and-drop** to move requests and folders between folders and
+  collections in the sidebar (moving a folder takes its contents along).
 - Documentation now has **edit** and **preview** modes (request docs and
   collection descriptions). Existing docs open in a read-only rendered preview
   with an **Edit** button; empty docs open straight in the editor; a **Done**

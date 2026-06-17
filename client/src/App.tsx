@@ -549,6 +549,61 @@ export default function App() {
     }
   }
 
+  async function moveRequestAction(
+    from: { collectionId: string; folderPath: string[]; requestId: string },
+    to: { collectionId: string; folderPath: string[] }
+  ) {
+    if (!workspaceId) return;
+    try {
+      const result = await api.moveRequest(workspaceId, from, to);
+      await loadTree(workspaceId, true);
+      setSelection((sel) =>
+        sel?.kind === 'request' &&
+        sel.collectionId === from.collectionId &&
+        sel.requestId === from.requestId &&
+        sel.folderPath.join('/') === from.folderPath.join('/')
+          ? {
+              kind: 'request',
+              collectionId: result.collectionId,
+              folderPath: result.folderPath,
+              requestId: result.requestId,
+            }
+          : sel
+      );
+    } catch (err) {
+      showError(err);
+    }
+  }
+
+  async function moveFolderAction(
+    from: { collectionId: string; folderPath: string[] },
+    to: { collectionId: string; folderPath: string[] }
+  ) {
+    if (!workspaceId) return;
+    try {
+      const result = await api.moveFolder(workspaceId, from, to);
+      await loadTree(workspaceId, true);
+      // Remap a selection that pointed inside the moved subtree to its new path.
+      setSelection((sel) => {
+        if (!sel || sel.kind === 'environment' || sel.kind === 'collection') {
+          return sel;
+        }
+        if (sel.collectionId !== from.collectionId) return sel;
+        const fromKey = from.folderPath.join('/');
+        const selKey = sel.folderPath.join('/');
+        if (selKey !== fromKey && !selKey.startsWith(fromKey + '/')) return sel;
+        const suffix = sel.folderPath.slice(from.folderPath.length);
+        return {
+          ...sel,
+          collectionId: result.collectionId,
+          folderPath: [...result.folderPath, ...suffix],
+        };
+      });
+    } catch (err) {
+      showError(err);
+    }
+  }
+
   async function selectEnvironment(environmentId: string | null) {
     if (!workspaceId) return;
     try {
@@ -749,6 +804,8 @@ export default function App() {
                   onImportCurl: promptImportCurl,
                   onDelete: deleteNode,
                 }}
+                onMoveRequest={moveRequestAction}
+                onMoveFolder={moveFolderAction}
                 onSelect={selectGuarded}
                 onNewCollection={promptNewCollection}
                 onNewEnvironment={promptNewEnvironment}

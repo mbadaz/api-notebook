@@ -550,6 +550,99 @@ export function deleteRequest(
   fs.rmSync(path.join(dir, `${id}.md`), { force: true });
 }
 
+// ----- move (reparent) -----
+
+export interface RequestLocation {
+  collectionId: string;
+  folderPath: string[];
+  requestId: string;
+}
+
+export interface FolderLocation {
+  collectionId: string;
+  folderPath: string[];
+}
+
+/** Request ids already taken in a node (incl. a legacy requests/ dir at root). */
+function takenRequestIds(dir: string, isRoot: boolean): Set<string> {
+  const taken = new Set(requestIdsIn(dir));
+  if (isRoot) {
+    const legacy = path.join(dir, LEGACY_REQUESTS_DIR);
+    if (!fs.existsSync(path.join(legacy, FOLDER_FILE))) {
+      for (const id of requestIdsIn(legacy)) taken.add(id);
+    }
+  }
+  return taken;
+}
+
+/**
+ * Moves a request (its .json and any .md sibling) into another node, possibly
+ * in another collection. The slug is kept unless it collides at the
+ * destination, in which case it is uniquified. Returns the new location.
+ */
+export function moveRequest(
+  ws: WorkspaceMeta,
+  from: RequestLocation,
+  to: FolderLocation
+): RequestLocation {
+  const srcDir = requestFileDir(ws, from.collectionId, from.folderPath, from.requestId);
+  const srcJson = path.join(srcDir, `${from.requestId}.json`);
+  if (!fs.existsSync(srcJson)) {
+    throw new HttpError(404, `Request "${from.requestId}" not found`);
+  }
+  const destDir = nodeDir(ws, to.collectionId, to.folderPath);
+  if (path.resolve(srcDir) === path.resolve(destDir)) {
+    return { ...to, requestId: from.requestId };
+  }
+  const newId = uniqueSlug(
+    from.requestId,
+    takenRequestIds(destDir, to.folderPath.length === 0)
+  );
+  fs.renameSync(srcJson, path.join(destDir, `${newId}.json`));
+  const srcMd = path.join(srcDir, `${from.requestId}.md`);
+  if (fs.existsSync(srcMd)) {
+    fs.renameSync(srcMd, path.join(destDir, `${newId}.md`));
+  }
+  return { ...to, requestId: newId };
+}
+
+/**
+ * Moves a folder (with everything inside it) under a new parent, possibly in
+ * another collection. Rejects moving a folder into itself or a descendant.
+ * Returns the new folder path.
+ */
+export function moveFolder(
+  ws: WorkspaceMeta,
+  from: FolderLocation,
+  to: FolderLocation
+): FolderLocation {
+  if (from.folderPath.length === 0) {
+    throw new HttpError(400, 'No folder to move');
+  }
+  const srcDir = nodeDir(ws, from.collectionId, from.folderPath);
+  const parentPath = from.folderPath.slice(0, -1);
+
+  if (from.collectionId === to.collectionId) {
+    // Into the same parent — nothing to do.
+    if (parentPath.join('/') === to.folderPath.join('/')) return from;
+    // Into itself or one of its own descendants — not allowed.
+    const fromKey = from.folderPath.join('/');
+    const destKey = to.folderPath.slice(0, from.folderPath.length).join('/');
+    if (
+      to.folderPath.length >= from.folderPath.length &&
+      destKey === fromKey
+    ) {
+      throw new HttpError(400, 'Cannot move a folder into itself or its own subfolder');
+    }
+  }
+
+  const destParent = nodeDir(ws, to.collectionId, to.folderPath);
+  const slug = from.folderPath[from.folderPath.length - 1];
+  const newSlug = uniqueSlug(slug, new Set(subfolderSlugsIn(destParent)));
+  fs.renameSync(srcDir, path.join(destParent, newSlug));
+  return { collectionId: to.collectionId, folderPath: [...to.folderPath, newSlug] };
+}
+
 export function createEnvironment(ws: WorkspaceMeta, name: string): Environment {
   const dir = environmentsDir(ws);
   const taken = new Set(

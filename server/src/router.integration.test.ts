@@ -209,6 +209,29 @@ describe('folder endpoints', () => {
     );
   });
 
+  it('moves a request into a folder via the move endpoint', async () => {
+    const r = await request(app)
+      .post(`/api/workspaces/${wsId}/collections/${cid}/requests`)
+      .send({ name: 'Loose', type: 'http' })
+      .expect(201);
+
+    const moved = await request(app)
+      .post(`/api/workspaces/${wsId}/move`)
+      .send({
+        kind: 'request',
+        from: { collectionId: cid, folderPath: '', requestId: r.body.id },
+        to: { collectionId: cid, folderPath: folderId },
+      })
+      .expect(200);
+    expect(moved.body.folderPath).toEqual([folderId]);
+
+    const tree = await request(app).get(`/api/workspaces/${wsId}`).expect(200);
+    const col = tree.body.collections.find((c: { id: string }) => c.id === cid);
+    const admin = col.folders.find((f: { id: string }) => f.id === folderId);
+    expect(admin.requests.map((x: { id: string }) => x.id)).toContain(r.body.id);
+    expect(col.requests.map((x: { id: string }) => x.id)).not.toContain(r.body.id);
+  });
+
   it('deletes a folder and its contents', async () => {
     await request(app)
       .delete(`/api/workspaces/${wsId}/collections/${cid}/folders?folderPath=${folderId}`)

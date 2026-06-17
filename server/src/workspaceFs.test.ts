@@ -141,6 +141,79 @@ describe('collections & requests (round-trip)', () => {
   });
 });
 
+describe('move (reparent)', () => {
+  it('moves a request into a folder and back out', () => {
+    const col = wsfs.createCollection(ws, 'M');
+    const folder = wsfs.createFolder(ws, col.id, [], 'Sub');
+    const req = wsfs.createRequest(ws, col.id, [], 'Item', 'http');
+
+    const moved = wsfs.moveRequest(
+      ws,
+      { collectionId: col.id, folderPath: [], requestId: req.id },
+      { collectionId: col.id, folderPath: [folder.id] }
+    );
+    expect(moved.folderPath).toEqual([folder.id]);
+
+    const collection = wsfs
+      .readTree(ws, null)
+      .collections.find((c) => c.id === col.id)!;
+    expect(collection.requests).toEqual([]);
+    expect(collection.folders[0].requests.map((r) => r.id)).toEqual([req.id]);
+  });
+
+  it('moves a request across collections, uniquifying a colliding slug', () => {
+    const a = wsfs.createCollection(ws, 'A');
+    const b = wsfs.createCollection(ws, 'B');
+    const src = wsfs.createRequest(ws, a.id, [], 'Get', 'http');
+    wsfs.createRequest(ws, b.id, [], 'Get', 'http'); // occupies the "get" slug in B
+
+    const moved = wsfs.moveRequest(
+      ws,
+      { collectionId: a.id, folderPath: [], requestId: src.id },
+      { collectionId: b.id, folderPath: [] }
+    );
+    expect(moved.collectionId).toBe(b.id);
+    expect(moved.requestId).toBe('get-2');
+    const bCol = wsfs.readTree(ws, null).collections.find((c) => c.id === b.id)!;
+    expect(bCol.requests.map((r) => r.id).sort()).toEqual(['get', 'get-2']);
+  });
+
+  it('moves a folder under another folder', () => {
+    const col = wsfs.createCollection(ws, 'F');
+    const outer = wsfs.createFolder(ws, col.id, [], 'Outer');
+    const loose = wsfs.createFolder(ws, col.id, [], 'Loose');
+    wsfs.createRequest(ws, col.id, [loose.id], 'Inside', 'http');
+
+    const moved = wsfs.moveFolder(
+      ws,
+      { collectionId: col.id, folderPath: [loose.id] },
+      { collectionId: col.id, folderPath: [outer.id] }
+    );
+    expect(moved.folderPath).toEqual([outer.id, loose.id]);
+
+    const collection = wsfs
+      .readTree(ws, null)
+      .collections.find((c) => c.id === col.id)!;
+    expect(collection.folders.map((f) => f.id)).toEqual([outer.id]);
+    const nested = collection.folders[0].folders[0];
+    expect(nested.id).toBe(loose.id);
+    expect(nested.requests.map((r) => r.name)).toEqual(['Inside']);
+  });
+
+  it('refuses to move a folder into its own descendant', () => {
+    const col = wsfs.createCollection(ws, 'G');
+    const parent = wsfs.createFolder(ws, col.id, [], 'Parent');
+    const child = wsfs.createFolder(ws, col.id, [parent.id], 'Child');
+    expect(() =>
+      wsfs.moveFolder(
+        ws,
+        { collectionId: col.id, folderPath: [parent.id] },
+        { collectionId: col.id, folderPath: [parent.id, child.id] }
+      )
+    ).toThrow(/itself or its own subfolder/);
+  });
+});
+
 describe('environment secret split', () => {
   it('keeps secret values out of the shared file and merges them back on read', () => {
     const env = wsfs.createEnvironment(ws, 'dev');

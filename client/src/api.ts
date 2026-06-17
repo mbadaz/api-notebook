@@ -111,6 +111,34 @@ export const api = {
       { method: 'DELETE' }
     ),
 
+  moveRequest: (
+    id: string,
+    from: { collectionId: string; folderPath: string[]; requestId: string },
+    to: { collectionId: string; folderPath: string[] }
+  ) =>
+    http<{ collectionId: string; folderPath: string[]; requestId: string }>(
+      `/api/workspaces/${id}/move`,
+      json({
+        kind: 'request',
+        from: { ...from, folderPath: from.folderPath.join('/') },
+        to: { ...to, folderPath: to.folderPath.join('/') },
+      })
+    ),
+
+  moveFolder: (
+    id: string,
+    from: { collectionId: string; folderPath: string[] },
+    to: { collectionId: string; folderPath: string[] }
+  ) =>
+    http<{ collectionId: string; folderPath: string[] }>(
+      `/api/workspaces/${id}/move`,
+      json({
+        kind: 'folder',
+        from: { ...from, folderPath: from.folderPath.join('/') },
+        to: { ...to, folderPath: to.folderPath.join('/') },
+      })
+    ),
+
   createRequest: (
     id: string,
     cid: string,

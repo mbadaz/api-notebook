@@ -261,6 +261,43 @@ router.delete(
 );
 
 router.post(
+  '/workspaces/:id/move',
+  wrap((req, res) => {
+    const ws = getWorkspace(req.params.id);
+    const from = req.body.from ?? {};
+    const to = req.body.to ?? {};
+    const dest = {
+      collectionId: requireString(to.collectionId, 'to.collectionId'),
+      folderPath: parseFolderPath(to.folderPath),
+    };
+    if (req.body.kind === 'folder') {
+      res.json(
+        wsfs.moveFolder(
+          ws,
+          {
+            collectionId: requireString(from.collectionId, 'from.collectionId'),
+            folderPath: parseFolderPath(from.folderPath),
+          },
+          dest
+        )
+      );
+    } else {
+      res.json(
+        wsfs.moveRequest(
+          ws,
+          {
+            collectionId: requireString(from.collectionId, 'from.collectionId'),
+            folderPath: parseFolderPath(from.folderPath),
+            requestId: requireString(from.requestId, 'from.requestId'),
+          },
+          dest
+        )
+      );
+    }
+  })
+);
+
+router.post(
   '/workspaces/:id/import/postman',
   wrap((req, res) => {
     const ws = getWorkspace(req.params.id);

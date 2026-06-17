@@ -1,4 +1,4 @@
-import { useState, type MouseEvent } from 'react';
+import { useState, type DragEvent, type MouseEvent } from 'react';
 import type { Selection } from '../selection';
 import type { ApiRequest, Collection, Folder, WorkspaceTree } from '../types';
 
@@ -26,11 +26,23 @@ interface Props {
   canPaste: boolean;
   requestActions: RequestActions;
   nodeActions: NodeActions;
+  onMoveRequest: (
+    from: { collectionId: string; folderPath: string[]; requestId: string },
+    to: { collectionId: string; folderPath: string[] }
+  ) => void;
+  onMoveFolder: (
+    from: { collectionId: string; folderPath: string[] },
+    to: { collectionId: string; folderPath: string[] }
+  ) => void;
   onSelect: (selection: Selection) => void;
   onNewCollection: () => void;
   onNewEnvironment: () => void;
   onImportPostman: () => void;
 }
+
+type DragItem =
+  | { kind: 'request'; collectionId: string; folderPath: string[]; requestId: string }
+  | { kind: 'folder'; collectionId: string; folderPath: string[] };
 
 interface MenuState {
   kind: 'request' | 'node';
@@ -62,6 +74,8 @@ export function Sidebar({
   canPaste,
   requestActions,
   nodeActions,
+  onMoveRequest,
+  onMoveFolder,
   onSelect,
   onNewCollection,
   onNewEnvironment,
@@ -69,12 +83,87 @@ export function Sidebar({
 }: Props) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [menu, setMenu] = useState<MenuState | null>(null);
+  const [drag, setDrag] = useState<DragItem | null>(null);
+  const [dropKey, setDropKey] = useState<string | null>(null);
 
   const isSelected = (sel: Selection): boolean =>
     JSON.stringify(sel) === JSON.stringify(selection);
 
   const toggle = (key: string) =>
     setCollapsed((c) => ({ ...c, [key]: !c[key] }));
+
+  /** Whether the dragged item may drop into the given node (not a no-op/cycle). */
+  function canDrop(item: DragItem, cid: string, folderPath: string[]): boolean {
+    if (item.kind === 'folder') {
+      if (item.collectionId !== cid) return true;
+      const fromKey = item.folderPath.join('/');
+      const intoKey = folderPath.slice(0, item.folderPath.length).join('/');
+      // Into itself or a descendant.
+      if (folderPath.length >= item.folderPath.length && intoKey === fromKey) {
+        return false;
+      }
+      // Into its current parent (no change).
+      return item.folderPath.slice(0, -1).join('/') !== folderPath.join('/');
+    }
+    // Request: a no-op when it's already in this node.
+    return !(
+      item.collectionId === cid &&
+      item.folderPath.join('/') === folderPath.join('/')
+    );
+  }
+
+  function onDropInto(cid: string, folderPath: string[]) {
+    const item = drag;
+    setDrag(null);
+    setDropKey(null);
+    if (!item || !canDrop(item, cid, folderPath)) return;
+    if (item.kind === 'request') {
+      onMoveRequest(
+        {
+          collectionId: item.collectionId,
+          folderPath: item.folderPath,
+          requestId: item.requestId,
+        },
+        { collectionId: cid, folderPath }
+      );
+    } else {
+      onMoveFolder(
+        { collectionId: item.collectionId, folderPath: item.folderPath },
+        { collectionId: cid, folderPath }
+      );
+    }
+  }
+
+  /** Drop-target handlers for a node (collection or folder). */
+  function dropTarget(cid: string, folderPath: string[], key: string) {
+    return {
+      onDragOver: (e: DragEvent) => {
+        if (!drag || !canDrop(drag, cid, folderPath)) return;
+        e.preventDefault();
+        if (dropKey !== key) setDropKey(key);
+      },
+      onDragLeave: () => setDropKey((k) => (k === key ? null : k)),
+      onDrop: (e: DragEvent) => {
+        e.preventDefault();
+        onDropInto(cid, folderPath);
+      },
+    };
+  }
+
+  function dragSource(item: DragItem) {
+    return {
+      draggable: true,
+      onDragStart: (e: DragEvent) => {
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', '');
+        setDrag(item);
+      },
+      onDragEnd: () => {
+        setDrag(null);
+        setDropKey(null);
+      },
+    };
+  }
 
   function openMenu(
     e: MouseEvent<HTMLButtonElement>,
@@ -131,6 +220,7 @@ export function Sidebar({
         key={`r:${request.id}`}
         className={isSelected(sel) ? 'sidebar-row request-row selected' : 'sidebar-row request-row'}
         style={{ paddingLeft: depth * INDENT + 22 }}
+        {...dragSource({ kind: 'request', collectionId, folderPath, requestId: request.id })}
       >
         <button className="row-label" onClick={() => onSelect(sel)}>
           <span
@@ -171,11 +261,16 @@ export function Sidebar({
     const folderPath = [...parentPath, folder.id];
     const key = pathKey(collectionId, folderPath);
     const sel: Selection = { kind: 'folder', collectionId, folderPath };
+    const cls =
+      (isSelected(sel) ? 'sidebar-row selected' : 'sidebar-row') +
+      (dropKey === key ? ' drop-target' : '');
     return (
       <div key={`f:${folder.id}`}>
         <div
-          className={isSelected(sel) ? 'sidebar-row selected' : 'sidebar-row'}
+          className={cls}
           style={{ paddingLeft: depth * INDENT }}
+          {...dragSource({ kind: 'folder', collectionId, folderPath })}
+          {...dropTarget(collectionId, folderPath, key)}
         >
           <button className="icon-btn chevron" onClick={() => toggle(key)}>
             {collapsed[key] ? '▸' : '▾'}
@@ -214,15 +309,13 @@ export function Sidebar({
 
   function renderCollection(collection: Collection) {
     const key = pathKey(collection.id, []);
+    const cls =
+      (isSelected({ kind: 'collection', collectionId: collection.id })
+        ? 'sidebar-row selected'
+        : 'sidebar-row') + (dropKey === key ? ' drop-target' : '');
     return (
       <div key={collection.id}>
-        <div
-          className={
-            isSelected({ kind: 'collection', collectionId: collection.id })
-              ? 'sidebar-row selected'
-              : 'sidebar-row'
-          }
-        >
+        <div className={cls} {...dropTarget(collection.id, [], key)}>
           <button className="icon-btn chevron" onClick={() => toggle(key)}>
             {collapsed[key] ? '▸' : '▾'}
           </button>

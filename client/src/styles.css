@@ -149,6 +149,12 @@ pre,
   background: rgba(255, 122, 69, 0.13);
 }
 
+.sidebar-row.drop-target {
+  outline: 1px dashed var(--accent, #ff7a45);
+  outline-offset: -1px;
+  background: rgba(255, 122, 69, 0.08);
+}
+
 .sidebar-row .icon-btn {
   visibility: hidden;
 }

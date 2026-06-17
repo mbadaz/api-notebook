@@ -1,4 +1,4 @@
-export type RequestType = 'http' | 'graphql' | 'websocket';
+export type RequestType = 'http' | 'graphql' | 'websocket' | 'socketio';
 
 export type HttpMethod =
   | 'GET'
@@ -66,6 +66,21 @@ export interface WebSocketConfig {
   messages: SavedMessage[];
 }
 
+/** Socket.IO connection config (handshake reuses the request's headers + auth). */
+export interface SocketIOConfig {
+  url: string;
+  /** Custom handshake path; blank uses the Socket.IO default (/socket.io). */
+  path: string;
+  /** JSON object sent as the connection `auth` payload (blank for none). */
+  auth: string;
+  /** Handshake query parameters. */
+  query: KeyValue[];
+  /** Reusable emit templates: `name` is the event, `content` is JSON args. */
+  emitEvents: SavedMessage[];
+  /** Event names to listen for; empty means listen to every event. */
+  listenEvents: string[];
+}
+
 /** Postman-style automation scripts (JavaScript using the `pm` API). */
 export interface Scripts {
   preRequest: string;
@@ -84,6 +99,7 @@ export interface ApiRequest {
   body: RequestBody;
   graphql: GraphQLBody;
   websocket: WebSocketConfig;
+  socketio: SocketIOConfig;
   docs: string;
   scripts: Scripts;
 }

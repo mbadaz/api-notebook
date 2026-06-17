@@ -234,6 +234,7 @@ function readRequest(
   const storedScripts: Partial<ApiRequest['scripts']> = stored.scripts ?? {};
   const storedGraphql: Partial<ApiRequest['graphql']> = stored.graphql ?? {};
   const storedWebsocket: Partial<ApiRequest['websocket']> = stored.websocket ?? {};
+  const storedSocketio: Partial<ApiRequest['socketio']> = stored.socketio ?? {};
   return {
     ...stored,
     body: {
@@ -247,6 +248,15 @@ function readRequest(
     scripts: { preRequest: '', postResponse: '', ...storedScripts },
     graphql: { query: '', variables: '', ...storedGraphql },
     websocket: { url: '', subprotocols: '', messages: [], ...storedWebsocket },
+    socketio: {
+      url: '',
+      path: '',
+      auth: '',
+      query: [],
+      emitEvents: [],
+      listenEvents: [],
+      ...storedSocketio,
+    },
     id,
     docs,
   };
@@ -506,6 +516,7 @@ export function defaultRequest(
     body: { mode: 'none', content: '', form: [], formData: [], binaryPath: '' },
     graphql: { query: '', variables: '' },
     websocket: { url: '', subprotocols: '', messages: [] },
+    socketio: { url: '', path: '', auth: '', query: [], emitEvents: [], listenEvents: [] },
     docs: '',
     scripts: { preRequest: '', postResponse: '' },
   };

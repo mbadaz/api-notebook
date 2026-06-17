@@ -134,6 +134,35 @@ describe('collections & requests (round-trip)', () => {
     expect(read.websocket.messages).toEqual([{ name: 'ping', content: '{"op":"ping"}' }]);
   });
 
+  it('persists a socketio request with its config and saved emits', () => {
+    const col = wsfs.createCollection(ws, 'IO');
+    const created = wsfs.createRequest(ws, col.id, [], 'Live', 'socketio');
+    expect(created.socketio).toEqual({
+      url: '',
+      path: '',
+      auth: '',
+      query: [],
+      emitEvents: [],
+      listenEvents: [],
+    });
+    wsfs.updateRequest(ws, col.id, [], created.id, {
+      ...created,
+      socketio: {
+        url: 'https://x',
+        path: '/ws',
+        auth: '{"token":"t"}',
+        query: [{ key: 'room', value: 'lobby', enabled: true }],
+        emitEvents: [{ name: 'chat', content: '["hi"]' }],
+        listenEvents: ['chat', 'pong'],
+      },
+    });
+    const read = wsfs.getRequest(ws, col.id, [], created.id);
+    expect(read.type).toBe('socketio');
+    expect(read.socketio.url).toBe('https://x');
+    expect(read.socketio.emitEvents).toEqual([{ name: 'chat', content: '["hi"]' }]);
+    expect(read.socketio.listenEvents).toEqual(['chat', 'pong']);
+  });
+
   it('back-fills missing fields and reads a legacy requests/ subdir', () => {
     const col = wsfs.createCollection(ws, 'Old');
     // Pre-folders workspaces stored requests in a legacy requests/ subdir.

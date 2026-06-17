@@ -15,6 +15,11 @@ See [RELEASING.md](RELEASING.md) for the release process.
   jar apply), with a message log, a composer, and reusable saved messages.
   Backed by a new multiplexed live channel (`/live`) shared by future streaming
   protocols.
+- **Socket.IO requests**: connect to a Socket.IO server (routed through the
+  server like WebSocket, with a configurable handshake path, JSON `auth`
+  payload, query parameters, and an events filter), emit named events with JSON
+  arguments, and watch incoming events in the live log, with reusable saved
+  emits.
 - **Folders** inside collections, nestable to any depth (Postman-style).
   Folders carry their own description and pre-request/test scripts, which run in
   the execution chain (collection → folder(s) → request). Postman imports now

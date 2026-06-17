@@ -18,6 +18,10 @@ interface Props {
   sendLabel?: string;
   /** Placeholder for the composer textarea. */
   placeholder?: string;
+  /** Optional event-name field shown before the textarea (Socket.IO). */
+  eventName?: { value: string; onChange: (value: string) => void; placeholder?: string };
+  /** Called when a saved message is picked, in addition to filling the textarea. */
+  onPickSaved?: (message: SavedMessage) => void;
 }
 
 function arrow(dir: LogEntry['dir']): string {
@@ -34,6 +38,8 @@ export function MessageLogPanel({
   onClear,
   sendLabel = 'Send',
   placeholder = 'Message to send…',
+  eventName,
+  onPickSaved,
 }: Props) {
   const [text, setText] = useState('');
   const logRef = useRef<HTMLDivElement>(null);
@@ -85,6 +91,15 @@ export function MessageLogPanel({
       </div>
 
       <div className="message-composer">
+        {eventName && (
+          <input
+            className="event-name-input"
+            value={eventName.value}
+            placeholder={eventName.placeholder ?? 'event name'}
+            disabled={!connected}
+            onChange={(e) => eventName.onChange(e.target.value)}
+          />
+        )}
         <textarea
           className="code-area"
           value={text}
@@ -106,7 +121,10 @@ export function MessageLogPanel({
               value=""
               onChange={(e) => {
                 const m = savedMessages.find((s) => s.name === e.target.value);
-                if (m) setText(m.content);
+                if (m) {
+                  setText(m.content);
+                  onPickSaved?.(m);
+                }
               }}
             >
               <option value="">Saved messages…</option>

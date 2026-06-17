@@ -7,6 +7,7 @@ import * as wsfs from './workspaceFs.js';
 import type { ApiRequest } from './types.js';
 import type { DriverContext, Emit, LiveDriver } from './live/driver.js';
 import { createWsDriver } from './live/wsDriver.js';
+import { createSocketioDriver } from './live/socketioDriver.js';
 
 /**
  * The live channel: a single browser WebSocket (at /live) multiplexes many
@@ -54,6 +55,8 @@ function driverFor(type: ApiRequest['type'], ctx: DriverContext): LiveDriver {
   switch (type) {
     case 'websocket':
       return createWsDriver(ctx);
+    case 'socketio':
+      return createSocketioDriver(ctx);
     default:
       throw new Error(`Protocol "${type}" is not supported on the live channel`);
   }

@@ -285,6 +285,7 @@ function convertRequest(item: PostmanItem): ConvertedRequest {
     body,
     graphql,
     websocket: { url: '', subprotocols: '', messages: [] },
+    socketio: { url: '', path: '', auth: '', query: [], emitEvents: [], listenEvents: [] },
     docs: describe(req.description),
     scripts: eventsToScripts(item.event),
   };

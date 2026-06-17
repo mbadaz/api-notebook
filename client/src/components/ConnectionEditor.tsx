@@ -44,10 +44,13 @@ export function ConnectionEditor({
   const [status, setStatus] = useState<Status>('idle');
   const [entries, setEntries] = useState<LogEntry[]>([]);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [eventName, setEventName] = useState('');
   const sessionRef = useRef<LiveSession | null>(null);
 
+  const isIo = draft.type === 'socketio';
   const dirty = JSON.stringify(draft) !== JSON.stringify(saved);
   const connected = status === 'open';
+  const url = isIo ? draft.socketio.url : draft.websocket.url;
 
   useEffect(() => {
     onDirtyChange(dirty);
@@ -67,6 +70,8 @@ export function ConnectionEditor({
     setDraft((d) => ({ ...d, ...changes }));
   const patchWs = (changes: Partial<ApiRequest['websocket']>) =>
     setDraft((d) => ({ ...d, websocket: { ...d.websocket, ...changes } }));
+  const patchIo = (changes: Partial<ApiRequest['socketio']>) =>
+    setDraft((d) => ({ ...d, socketio: { ...d.socketio, ...changes } }));
 
   const log = (e: LogEntry) => setEntries((prev) => [...prev, e]);
 
@@ -84,7 +89,7 @@ export function ConnectionEditor({
   function connect() {
     if (sessionRef.current) return;
     setStatus('connecting');
-    log(entry('system', `Connecting to ${draft.websocket.url}…`));
+    log(entry('system', `Connecting to ${url}…`));
     sessionRef.current = createLiveSession({
       workspaceId,
       collectionId,
@@ -95,8 +100,14 @@ export function ConnectionEditor({
         log(entry('system', 'Connected.'));
       },
       onMessage: (payload) => {
-        const p = payload as { data?: string; binary?: boolean };
-        log(entry('in', p?.binary ? `[binary ${p.data?.length ?? 0}b base64] ${p.data ?? ''}` : p?.data ?? ''));
+        if (isIo) {
+          const p = payload as { event?: string; args?: unknown[] };
+          const args = p?.args ?? [];
+          log(entry('in', `${p?.event ?? ''} ${args.map((a) => JSON.stringify(a)).join(', ')}`.trim()));
+        } else {
+          const p = payload as { data?: string; binary?: boolean };
+          log(entry('in', p?.binary ? `[binary ${p.data?.length ?? 0}b base64] ${p.data ?? ''}` : p?.data ?? ''));
+        }
       },
       onError: (message) => {
         setStatus('error');
@@ -119,8 +130,22 @@ export function ConnectionEditor({
   }
 
   function sendMessage(text: string) {
-    sessionRef.current?.send({ data: text });
-    log(entry('out', text));
+    if (isIo) {
+      const event = eventName.trim();
+      if (!event) return;
+      let args: unknown[];
+      try {
+        const parsed = text.trim() ? JSON.parse(text) : [];
+        args = Array.isArray(parsed) ? parsed : [parsed];
+      } catch {
+        args = [text];
+      }
+      sessionRef.current?.send({ event, args });
+      log(entry('out', `${event} ${text}`.trim()));
+    } else {
+      sessionRef.current?.send({ data: text });
+      log(entry('out', text));
+    }
   }
 
   useEffect(() => {
@@ -134,10 +159,12 @@ export function ConnectionEditor({
     return () => window.removeEventListener('keydown', onKeyDown);
   });
 
+  const savedMessages = isIo ? draft.socketio.emitEvents : draft.websocket.messages;
+
   return (
     <div className="request-editor">
       <div className="editor-title-row">
-        <span className="type-badge type-websocket">WS</span>
+        <span className={`type-badge type-${draft.type}`}>{isIo ? 'IO' : 'WS'}</span>
         <input
           className="name-input"
           value={draft.name}
@@ -161,20 +188,16 @@ export function ConnectionEditor({
         <VarField
           className="url-input"
           wrapClassName="url-wrap"
-          value={draft.websocket.url}
-          placeholder="wss://echo.example.com/socket"
-          onChange={(url) => patchWs({ url })}
+          value={url}
+          placeholder={isIo ? 'wss://socket.example.com/namespace' : 'wss://echo.example.com/socket'}
+          onChange={(value) => (isIo ? patchIo({ url: value }) : patchWs({ url: value }))}
         />
         {connected || status === 'connecting' ? (
           <button className="btn" onClick={disconnect}>
             Disconnect
           </button>
         ) : (
-          <button
-            className="btn btn-primary"
-            onClick={connect}
-            disabled={!draft.websocket.url.trim()}
-          >
+          <button className="btn btn-primary" onClick={connect} disabled={!url.trim()}>
             Connect
           </button>
         )}
@@ -186,7 +209,7 @@ export function ConnectionEditor({
             ['connection', 'Connection'],
             ['headers', 'Headers'],
             ['auth', 'Auth'],
-            ['messages', 'Saved Messages'],
+            ['messages', isIo ? 'Saved Emits' : 'Saved Messages'],
             ['docs', 'Docs'],
           ] as [Tab, string][]
         ).map(([value, label]) => (
@@ -201,21 +224,72 @@ export function ConnectionEditor({
       </div>
 
       <div className="tab-content">
-        {tab === 'connection' && (
-          <div className="kv-editor">
-            <label className="field-label">Subprotocols</label>
-            <VarField
-              className="kv-value"
-              wrapClassName="kv-value"
-              value={draft.websocket.subprotocols}
-              placeholder="comma- or space-separated (optional)"
-              onChange={(subprotocols) => patchWs({ subprotocols })}
-            />
-            <p className="muted">
-              Sent as <code>Sec-WebSocket-Protocol</code> during the handshake.
-            </p>
-          </div>
-        )}
+        {tab === 'connection' &&
+          (isIo ? (
+            <div className="kv-editor">
+              <p className="muted">
+                The path in the URL above is the Socket.IO{' '}
+                <strong>namespace</strong> — e.g.{' '}
+                <code>wss://ws.postman-echo.com/socketio</code> joins the{' '}
+                <code>/socketio</code> namespace.
+              </p>
+              <label className="field-label">Auth payload (JSON)</label>
+              <textarea
+                className="code-area"
+                value={draft.socketio.auth}
+                placeholder='{ "token": "{{token}}" }'
+                spellCheck={false}
+                onChange={(e) => patchIo({ auth: e.target.value })}
+              />
+              <label className="field-label">Query parameters</label>
+              <KeyValueEditor
+                items={draft.socketio.query}
+                onChange={(query) => patchIo({ query })}
+                keyPlaceholder="Param"
+                addLabel="Param"
+              />
+              <label className="field-label">Listen for events</label>
+              <input
+                className="kv-value"
+                value={draft.socketio.listenEvents.join(', ')}
+                placeholder="comma-separated (blank = all events)"
+                onChange={(e) =>
+                  patchIo({
+                    listenEvents: e.target.value.split(/[\s,]+/).filter(Boolean),
+                  })
+                }
+              />
+              <details className="advanced-field">
+                <summary>Advanced</summary>
+                <label className="field-label">Handshake path</label>
+                <VarField
+                  className="kv-value"
+                  wrapClassName="kv-value"
+                  value={draft.socketio.path}
+                  placeholder="/socket.io (default)"
+                  onChange={(path) => patchIo({ path })}
+                />
+                <p className="muted">
+                  The engine.io mount path, not the namespace. Leave blank unless
+                  a server documents a custom one.
+                </p>
+              </details>
+            </div>
+          ) : (
+            <div className="kv-editor">
+              <label className="field-label">Subprotocols</label>
+              <VarField
+                className="kv-value"
+                wrapClassName="kv-value"
+                value={draft.websocket.subprotocols}
+                placeholder="comma- or space-separated (optional)"
+                onChange={(subprotocols) => patchWs({ subprotocols })}
+              />
+              <p className="muted">
+                Sent as <code>Sec-WebSocket-Protocol</code> during the handshake.
+              </p>
+            </div>
+          ))}
 
         {tab === 'headers' && (
           <KeyValueEditor
@@ -232,8 +306,13 @@ export function ConnectionEditor({
 
         {tab === 'messages' && (
           <SavedMessagesEditor
-            messages={draft.websocket.messages}
-            onChange={(messages) => patchWs({ messages })}
+            messages={savedMessages}
+            onChange={(messages) =>
+              isIo ? patchIo({ emitEvents: messages }) : patchWs({ messages })
+            }
+            nameLabel={isIo ? 'Event name' : 'Message name'}
+            contentLabel={isIo ? 'JSON args' : 'Message content'}
+            addLabel={isIo ? 'Add Saved Emit' : 'Add Saved Message'}
           />
         )}
 
@@ -249,10 +328,17 @@ export function ConnectionEditor({
       <MessageLogPanel
         entries={entries}
         connected={connected}
-        savedMessages={draft.websocket.messages}
+        savedMessages={savedMessages}
         onSend={sendMessage}
         onClear={() => setEntries([])}
-        placeholder="Message to send…"
+        sendLabel={isIo ? 'Emit' : 'Send'}
+        placeholder={isIo ? 'JSON args (e.g. ["hello"])' : 'Message to send…'}
+        eventName={
+          isIo
+            ? { value: eventName, onChange: setEventName, placeholder: 'event name' }
+            : undefined
+        }
+        onPickSaved={isIo ? (m) => setEventName(m.name) : undefined}
       />
     </div>
   );
@@ -261,9 +347,15 @@ export function ConnectionEditor({
 function SavedMessagesEditor({
   messages,
   onChange,
+  nameLabel = 'Message name',
+  contentLabel = 'Message content',
+  addLabel = 'Add Saved Message',
 }: {
   messages: SavedMessage[];
   onChange: (messages: SavedMessage[]) => void;
+  nameLabel?: string;
+  contentLabel?: string;
+  addLabel?: string;
 }) {
   const update = (i: number, changes: Partial<SavedMessage>) =>
     onChange(messages.map((m, idx) => (idx === i ? { ...m, ...changes } : m)));
@@ -275,7 +367,7 @@ function SavedMessagesEditor({
             <input
               className="name-input"
               value={m.name}
-              placeholder="Message name"
+              placeholder={nameLabel}
               onChange={(e) => update(i, { name: e.target.value })}
             />
             <button
@@ -288,7 +380,7 @@ function SavedMessagesEditor({
           <textarea
             className="code-area"
             value={m.content}
-            placeholder="Message content"
+            placeholder={contentLabel}
             spellCheck={false}
             onChange={(e) => update(i, { content: e.target.value })}
           />
@@ -298,7 +390,7 @@ function SavedMessagesEditor({
         className="btn btn-sm"
         onClick={() => onChange([...messages, { name: `Message ${messages.length + 1}`, content: '' }])}
       >
-        Add Saved Message
+        {addLabel}
       </button>
     </div>
   );

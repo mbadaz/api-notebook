@@ -279,11 +279,12 @@ export default function App() {
             { value: 'http', label: 'HTTP' },
             { value: 'graphql', label: 'GraphQL' },
             { value: 'websocket', label: 'WebSocket' },
+            { value: 'socketio', label: 'Socket.IO' },
           ],
         },
       ],
       onSubmit: async (values) => {
-        const allowed: RequestType[] = ['http', 'graphql', 'websocket'];
+        const allowed: RequestType[] = ['http', 'graphql', 'websocket', 'socketio'];
         const type = (allowed as string[]).includes(values.type)
           ? (values.type as RequestType)
           : 'http';
@@ -672,7 +673,7 @@ export default function App() {
       const request = findRequest(collectionId, folderPath, requestId);
       if (collection && request) {
         const key = `${collectionId}/${folderPath.join('/')}/${request.id}`;
-        if (request.type === 'websocket') {
+        if (request.type === 'websocket' || request.type === 'socketio') {
           return (
             <ConnectionEditor
               key={key}

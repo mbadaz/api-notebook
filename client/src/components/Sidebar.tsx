@@ -69,12 +69,14 @@ const pathKey = (collectionId: string, folderPath: string[]): string =>
 function badgeLabel(request: ApiRequest): string {
   if (request.type === 'graphql') return 'GQL';
   if (request.type === 'websocket') return 'WS';
+  if (request.type === 'socketio') return 'IO';
   return request.method;
 }
 
 function badgeClass(request: ApiRequest): string {
   if (request.type === 'graphql') return 'method-GQL';
   if (request.type === 'websocket') return 'method-WS';
+  if (request.type === 'socketio') return 'method-IO';
   return `method-${request.method}`;
 }
 

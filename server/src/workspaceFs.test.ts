@@ -33,7 +33,7 @@ describe('collections & requests (round-trip)', () => {
 
   it('persists a request (incl. scripts and docs) and reads it back', () => {
     const col = wsfs.createCollection(ws, 'C');
-    const created = wsfs.createRequest(ws, col.id, 'Get user', 'http');
+    const created = wsfs.createRequest(ws, col.id, [], 'Get user', 'http');
     const full = {
       ...created,
       method: 'POST' as const,
@@ -42,26 +42,74 @@ describe('collections & requests (round-trip)', () => {
       scripts: { preRequest: 'a()', postResponse: 'b()' },
       docs: '# Title\n\nbody',
     };
-    wsfs.updateRequest(ws, col.id, created.id, full);
+    wsfs.updateRequest(ws, col.id, [], created.id, full);
 
-    const read = wsfs.getRequest(ws, col.id, created.id);
+    const read = wsfs.getRequest(ws, col.id, [], created.id);
     expect(read.method).toBe('POST');
     expect(read.url).toBe('{{base}}/users/1');
     expect(read.scripts).toEqual({ preRequest: 'a()', postResponse: 'b()' });
     expect(read.docs).toContain('# Title');
-    // docs are stored as a sibling .md file
+    // docs are stored as a sibling .md file in the collection directory
     expect(
-      fs.existsSync(path.join(dir, 'collections', col.id, 'requests', `${created.id}.md`))
+      fs.existsSync(path.join(dir, 'collections', col.id, `${created.id}.md`))
     ).toBe(true);
 
     const tree = wsfs.readTree(ws, null);
     expect(tree.collections[0].requests.map((r) => r.name)).toContain('Get user');
   });
 
-  it('back-fills missing fields when reading an older request file', () => {
+  it('round-trips folders, nesting and folder-level metadata', () => {
+    const col = wsfs.createCollection(ws, 'API');
+    const outer = wsfs.createFolder(ws, col.id, [], 'Outer');
+    const inner = wsfs.createFolder(ws, col.id, [outer.id], 'Inner');
+    wsfs.updateFolder(ws, col.id, [outer.id, inner.id], {
+      description: 'inner docs',
+      scripts: { preRequest: 'inPre()', postResponse: '' },
+    });
+    const req = wsfs.createRequest(ws, col.id, [outer.id, inner.id], 'Deep', 'http');
+
+    expect(wsfs.getRequest(ws, col.id, [outer.id, inner.id], req.id).name).toBe('Deep');
+
+    const collection = wsfs
+      .readTree(ws, null)
+      .collections.find((c) => c.id === col.id)!;
+    const readInner = collection.folders[0].folders[0];
+    expect(collection.folders[0].name).toBe('Outer');
+    expect(readInner.name).toBe('Inner');
+    expect(readInner.description).toBe('inner docs');
+    expect(readInner.requests.map((r) => r.name)).toEqual(['Deep']);
+  });
+
+  it('combines collection and folder scripts down the chain', () => {
+    const col = wsfs.createCollection(ws, 'Chain');
+    wsfs.updateCollection(ws, col.id, {
+      scripts: { preRequest: 'colPre()', postResponse: 'colTest()' },
+    });
+    const f = wsfs.createFolder(ws, col.id, [], 'F');
+    wsfs.updateFolder(ws, col.id, [f.id], {
+      scripts: { preRequest: 'fPre()', postResponse: '' },
+    });
+    const chain = wsfs.getScriptChain(ws, col.id, [f.id]);
+    expect(chain.preRequest).toBe('colPre()\n\nfPre()');
+    expect(chain.postResponse).toBe('colTest()');
+  });
+
+  it('deletes a folder and everything inside it', () => {
+    const col = wsfs.createCollection(ws, 'Del');
+    const f = wsfs.createFolder(ws, col.id, [], 'Gone');
+    wsfs.createRequest(ws, col.id, [f.id], 'Doomed', 'http');
+    wsfs.deleteFolder(ws, col.id, [f.id]);
+    const collection = wsfs
+      .readTree(ws, null)
+      .collections.find((c) => c.id === col.id)!;
+    expect(collection.folders).toEqual([]);
+  });
+
+  it('back-fills missing fields and reads a legacy requests/ subdir', () => {
     const col = wsfs.createCollection(ws, 'Old');
+    // Pre-folders workspaces stored requests in a legacy requests/ subdir.
     const reqDir = path.join(dir, 'collections', col.id, 'requests');
-    // A request written before body/scripts/graphql fields existed.
+    fs.mkdirSync(reqDir, { recursive: true });
     fs.writeFileSync(
       path.join(reqDir, 'legacy.json'),
       JSON.stringify({
@@ -74,7 +122,13 @@ describe('collections & requests (round-trip)', () => {
         auth: { type: 'none' },
       })
     );
-    const read = wsfs.getRequest(ws, col.id, 'legacy');
+    // The legacy request still surfaces at the collection root.
+    const collection = wsfs
+      .readTree(ws, null)
+      .collections.find((c) => c.id === col.id)!;
+    expect(collection.requests.map((r) => r.id)).toContain('legacy');
+
+    const read = wsfs.getRequest(ws, col.id, [], 'legacy');
     expect(read.body).toEqual({
       mode: 'none',
       content: '',

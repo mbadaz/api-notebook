@@ -85,7 +85,7 @@ interface PostmanItem {
 }
 
 interface PostmanCollection {
-  info?: { name?: string; schema?: string };
+  info?: { name?: string; schema?: string; description?: Described };
   item?: PostmanItem[];
   event?: PostmanEvent[];
 }
@@ -144,14 +144,6 @@ function eventsToScripts(events: PostmanEvent[] | undefined): Scripts {
 function joinScript(a: string, b: string): string {
   if (a && b) return `${a}\n\n${b}`;
   return a || b;
-}
-
-/** Combines an ancestor's scripts with a descendant folder's scripts. */
-function combineScripts(parent: Scripts, child: Scripts): Scripts {
-  return {
-    preRequest: joinScript(parent.preRequest, child.preRequest),
-    postResponse: joinScript(parent.postResponse, child.postResponse),
-  };
 }
 
 export function hasScripts(scripts: Scripts): boolean {
@@ -297,69 +289,65 @@ function convertRequest(item: PostmanItem): ConvertedRequest {
   };
 }
 
-export interface ConvertedCollectionGroup {
+export interface ConvertedFolder {
   name: string;
   description: string;
   scripts: Scripts;
+  folders: ConvertedFolder[];
   requests: ConvertedRequest[];
 }
 
 export interface ConvertedCollection {
   name: string;
-  groups: ConvertedCollectionGroup[];
+  description: string;
+  scripts: Scripts;
+  folders: ConvertedFolder[];
+  requests: ConvertedRequest[];
+}
+
+interface ConvertedNode {
+  folders: ConvertedFolder[];
+  requests: ConvertedRequest[];
 }
 
 /**
- * Postman folders can nest, but our model has a single collection level, so
- * nested folders are flattened into collections named by their path
- * ("Parent / Child"). Requests sitting directly at the collection root go
- * into a collection named after the Postman collection itself.
+ * Postman items are either folders (they have a nested `item` array) or
+ * requests. We mirror that structure directly: folders become folders (keeping
+ * their own pre-request/test scripts and description) and requests become
+ * requests in the node that contains them. Postman runs collection- and
+ * folder-level scripts around each request; we preserve them per node and the
+ * runtime combines the chain at execution time.
  */
+function convertNode(items: PostmanItem[]): ConvertedNode {
+  const folders: ConvertedFolder[] = [];
+  const requests: ConvertedRequest[] = [];
+  for (const item of items) {
+    if (Array.isArray(item.item)) {
+      const child = convertNode(item.item);
+      folders.push({
+        name: item.name ?? 'Folder',
+        description: describe(item.description),
+        scripts: eventsToScripts(item.event),
+        folders: child.folders,
+        requests: child.requests,
+      });
+    } else if (item.request) {
+      requests.push(convertRequest(item));
+    }
+  }
+  return { folders, requests };
+}
+
+/** A whole Postman collection maps to one of our collections, nesting intact. */
 export function convertCollection(json: PostmanCollection): ConvertedCollection {
-  const rootName = json.info?.name?.trim() || 'Imported';
-  const order: string[] = [];
-  const groups = new Map<string, ConvertedCollectionGroup>();
-
-  const ensure = (name: string, scripts: Scripts): ConvertedCollectionGroup => {
-    let group = groups.get(name);
-    if (!group) {
-      group = { name, description: '', scripts, requests: [] };
-      groups.set(name, group);
-      order.push(name);
-    }
-    return group;
+  const { folders, requests } = convertNode(json.item ?? []);
+  return {
+    name: json.info?.name?.trim() || 'Imported',
+    description: describe(json.info?.description),
+    scripts: eventsToScripts(json.event),
+    folders,
+    requests,
   };
-
-  // Postman runs collection- and folder-level scripts around every request;
-  // since folders are flattened into collections, each collection inherits the
-  // combined scripts of its ancestor chain (collection root → folders).
-  const walk = (
-    items: PostmanItem[],
-    pathParts: string[],
-    parentScripts: Scripts
-  ): void => {
-    for (const item of items) {
-      if (Array.isArray(item.item)) {
-        const childPath = [...pathParts, item.name ?? 'Folder'];
-        const childScripts = combineScripts(
-          parentScripts,
-          eventsToScripts(item.event)
-        );
-        walk(item.item, childPath, childScripts);
-        const desc = describe(item.description);
-        if (desc) {
-          const key = childPath.join(' / ');
-          if (groups.has(key)) groups.get(key)!.description = desc;
-        }
-      } else if (item.request) {
-        const key = pathParts.length ? pathParts.join(' / ') : rootName;
-        ensure(key, parentScripts).requests.push(convertRequest(item));
-      }
-    }
-  };
-
-  walk(json.item ?? [], [], eventsToScripts(json.event));
-  return { name: rootName, groups: order.map((k) => groups.get(k)!) };
 }
 
 export interface ConvertedEnvironment {

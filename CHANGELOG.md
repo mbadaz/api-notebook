@@ -10,6 +10,12 @@ See [RELEASING.md](RELEASING.md) for the release process.
 
 ### Added
 
+- **Folders** inside collections, nestable to any depth (Postman-style).
+  Folders carry their own description and pre-request/test scripts, which run in
+  the execution chain (collection → folder(s) → request). Postman imports now
+  preserve their folder structure instead of flattening it into separate
+  collections. On disk, folders are mirrored as nested directories; pre-folders
+  workspaces still load (their requests appear at the collection root).
 - Documentation now has **edit** and **preview** modes (request docs and
   collection descriptions). Existing docs open in a read-only rendered preview
   with an **Edit** button; empty docs open straight in the editor; a **Done**

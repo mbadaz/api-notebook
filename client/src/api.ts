@@ -3,12 +3,19 @@ import type {
   Collection,
   Environment,
   ExecutionResult,
+  Folder,
   KeyValue,
   RequestType,
   Scripts,
   WorkspaceMeta,
   WorkspaceTree,
 } from './types';
+
+/** Encodes a folder path (slugs, outer→inner) as a ?folderPath= query string. */
+const fpQuery = (folderPath: string[]): string =>
+  folderPath.length
+    ? `?folderPath=${encodeURIComponent(folderPath.join('/'))}`
+    : '';
 
 async function http<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
@@ -77,15 +84,53 @@ export const api = {
       method: 'DELETE',
     }),
 
-  createRequest: (id: string, cid: string, name: string, type: RequestType) =>
-    http<ApiRequest>(
-      `/api/workspaces/${id}/collections/${cid}/requests`,
-      json({ name, type })
+  createFolder: (id: string, cid: string, parentPath: string[], name: string) =>
+    http<Folder>(
+      `/api/workspaces/${id}/collections/${cid}/folders`,
+      json({ name, folderPath: parentPath.join('/') })
     ),
 
-  updateRequest: (id: string, cid: string, request: ApiRequest) =>
+  updateFolder: (
+    id: string,
+    cid: string,
+    folderPath: string[],
+    changes: { name?: string; description?: string; scripts?: Scripts }
+  ) =>
     http<null>(
-      `/api/workspaces/${id}/collections/${cid}/requests/${request.id}`,
+      `/api/workspaces/${id}/collections/${cid}/folders${fpQuery(folderPath)}`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify(changes),
+        headers: { 'content-type': 'application/json' },
+      }
+    ),
+
+  deleteFolder: (id: string, cid: string, folderPath: string[]) =>
+    http<null>(
+      `/api/workspaces/${id}/collections/${cid}/folders${fpQuery(folderPath)}`,
+      { method: 'DELETE' }
+    ),
+
+  createRequest: (
+    id: string,
+    cid: string,
+    folderPath: string[],
+    name: string,
+    type: RequestType
+  ) =>
+    http<ApiRequest>(
+      `/api/workspaces/${id}/collections/${cid}/requests`,
+      json({ name, type, folderPath: folderPath.join('/') })
+    ),
+
+  updateRequest: (
+    id: string,
+    cid: string,
+    folderPath: string[],
+    request: ApiRequest
+  ) =>
+    http<null>(
+      `/api/workspaces/${id}/collections/${cid}/requests/${request.id}${fpQuery(folderPath)}`,
       {
         method: 'PUT',
         body: JSON.stringify(request),
@@ -93,10 +138,11 @@ export const api = {
       }
     ),
 
-  deleteRequest: (id: string, cid: string, rid: string) =>
-    http<null>(`/api/workspaces/${id}/collections/${cid}/requests/${rid}`, {
-      method: 'DELETE',
-    }),
+  deleteRequest: (id: string, cid: string, folderPath: string[], rid: string) =>
+    http<null>(
+      `/api/workspaces/${id}/collections/${cid}/requests/${rid}${fpQuery(folderPath)}`,
+      { method: 'DELETE' }
+    ),
 
   createEnvironment: (id: string, name: string) =>
     http<Environment>(`/api/workspaces/${id}/environments`, json({ name })),
@@ -123,10 +169,15 @@ export const api = {
       json({ path })
     ),
 
-  execute: (id: string, request: ApiRequest, collectionId: string) =>
+  execute: (
+    id: string,
+    request: ApiRequest,
+    collectionId: string,
+    folderPath: string[] = []
+  ) =>
     http<ExecutionResult>(
       `/api/workspaces/${id}/execute`,
-      json({ request, collectionId })
+      json({ request, collectionId, folderPath: folderPath.join('/') })
     ),
 
   listCookies: (id: string) =>
@@ -152,5 +203,5 @@ export interface StoredCookie {
 }
 
 export type PostmanImportResult =
-  | { kind: 'collection'; collections: number; requests: number }
+  | { kind: 'collection'; collections: number; folders: number; requests: number }
   | { kind: 'environment'; name: string; variables: number };

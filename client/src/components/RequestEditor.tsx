@@ -21,6 +21,7 @@ import { VarField } from './VarField';
 interface Props {
   workspaceId: string;
   collectionId: string;
+  folderPath: string[];
   request: ApiRequest;
   onSaved: (request: ApiRequest) => void;
   onDelete: () => void;
@@ -60,6 +61,7 @@ const BODY_MODES: { value: BodyMode; label: string }[] = [
 export function RequestEditor({
   workspaceId,
   collectionId,
+  folderPath,
   request,
   onSaved,
   onDelete,
@@ -105,7 +107,7 @@ export function RequestEditor({
     setSaveError(null);
     const clean = canonical(draft);
     try {
-      await api.updateRequest(workspaceId, collectionId, clean);
+      await api.updateRequest(workspaceId, collectionId, folderPath, clean);
       setSaved(clean);
       setDraft(clean);
       onSaved(clean);
@@ -118,7 +120,7 @@ export function RequestEditor({
     setExecuting(true);
     setExecError(null);
     try {
-      const result = await api.execute(workspaceId, draft, collectionId);
+      const result = await api.execute(workspaceId, draft, collectionId, folderPath);
       setResponse(result);
       // Scripts may have persisted environment variables; refresh so the
       // sidebar, variable highlights and env editor reflect the new values.

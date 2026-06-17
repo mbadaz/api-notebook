@@ -27,6 +27,12 @@ function requireString(value: unknown, field: string): string {
   return value.trim();
 }
 
+/** A folder path is a slash-joined string of folder slugs ("" means root). */
+function parseFolderPath(value: unknown): string[] {
+  if (typeof value !== 'string' || !value) return [];
+  return value.split('/').filter(Boolean);
+}
+
 export const router = Router();
 
 router.post(
@@ -148,12 +154,47 @@ router.delete(
 );
 
 router.post(
+  '/workspaces/:id/collections/:cid/folders',
+  wrap((req, res) => {
+    const ws = getWorkspace(req.params.id);
+    const name = requireString(req.body.name, 'name');
+    const parentPath = parseFolderPath(req.body.folderPath);
+    res.status(201).json(wsfs.createFolder(ws, req.params.cid, parentPath, name));
+  })
+);
+
+router.patch(
+  '/workspaces/:id/collections/:cid/folders',
+  wrap((req, res) => {
+    const ws = getWorkspace(req.params.id);
+    wsfs.updateFolder(ws, req.params.cid, parseFolderPath(req.query.folderPath), {
+      name: req.body.name,
+      description: req.body.description,
+      scripts: req.body.scripts,
+    });
+    res.status(204).end();
+  })
+);
+
+router.delete(
+  '/workspaces/:id/collections/:cid/folders',
+  wrap((req, res) => {
+    const ws = getWorkspace(req.params.id);
+    wsfs.deleteFolder(ws, req.params.cid, parseFolderPath(req.query.folderPath));
+    res.status(204).end();
+  })
+);
+
+router.post(
   '/workspaces/:id/collections/:cid/requests',
   wrap((req, res) => {
     const ws = getWorkspace(req.params.id);
     const name = requireString(req.body.name, 'name');
     const type = req.body.type === 'graphql' ? 'graphql' : 'http';
-    res.status(201).json(wsfs.createRequest(ws, req.params.cid, name, type));
+    const folderPath = parseFolderPath(req.body.folderPath);
+    res
+      .status(201)
+      .json(wsfs.createRequest(ws, req.params.cid, folderPath, name, type));
   })
 );
 
@@ -164,6 +205,7 @@ router.put(
     wsfs.updateRequest(
       ws,
       req.params.cid,
+      parseFolderPath(req.query.folderPath),
       req.params.rid,
       req.body as ApiRequest
     );
@@ -175,7 +217,12 @@ router.delete(
   '/workspaces/:id/collections/:cid/requests/:rid',
   wrap((req, res) => {
     const ws = getWorkspace(req.params.id);
-    wsfs.deleteRequest(ws, req.params.cid, req.params.rid);
+    wsfs.deleteRequest(
+      ws,
+      req.params.cid,
+      parseFolderPath(req.query.folderPath),
+      req.params.rid
+    );
     res.status(204).end();
   })
 );
@@ -231,8 +278,9 @@ router.post(
     }
     const collectionId =
       typeof req.body.collectionId === 'string' ? req.body.collectionId : null;
+    const folderPath = parseFolderPath(req.body.folderPath);
     const collectionScripts = collectionId
-      ? wsfs.getCollectionScripts(ws, collectionId)
+      ? wsfs.getScriptChain(ws, collectionId, folderPath)
       : { preRequest: '', postResponse: '' };
 
     const activeId = appData.getActiveEnvironmentId(ws.id);

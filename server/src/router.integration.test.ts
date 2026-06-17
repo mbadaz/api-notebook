@@ -129,3 +129,133 @@ describe('workspace/collection/request endpoints', () => {
     expect(res.body.script.tests[0]).toMatchObject({ name: 'ok', passed: true });
   });
 });
+
+describe('folder endpoints', () => {
+  let wsId: string;
+  let cid: string;
+  let folderId: string;
+
+  beforeAll(async () => {
+    const wd = fs.mkdtempSync(path.join(os.tmpdir(), 'apinb-folders-'));
+    const ws = await request(app)
+      .post('/api/workspaces')
+      .send({ name: 'Folders WS', path: wd })
+      .expect(201);
+    wsId = ws.body.id;
+    const col = await request(app)
+      .post(`/api/workspaces/${wsId}/collections`)
+      .send({ name: 'C' })
+      .expect(201);
+    cid = col.body.id;
+  });
+
+  it('creates a folder, a nested folder, and a request inside it', async () => {
+    const folder = await request(app)
+      .post(`/api/workspaces/${wsId}/collections/${cid}/folders`)
+      .send({ name: 'Admin' })
+      .expect(201);
+    folderId = folder.body.id;
+    const sub = await request(app)
+      .post(`/api/workspaces/${wsId}/collections/${cid}/folders`)
+      .send({ name: 'Users', folderPath: folderId })
+      .expect(201);
+
+    await request(app)
+      .post(`/api/workspaces/${wsId}/collections/${cid}/requests`)
+      .send({ name: 'List', type: 'http', folderPath: `${folderId}/${sub.body.id}` })
+      .expect(201);
+
+    const tree = await request(app).get(`/api/workspaces/${wsId}`).expect(200);
+    const col = tree.body.collections.find((c: { id: string }) => c.id === cid);
+    const admin = col.folders.find((f: { id: string }) => f.id === folderId);
+    expect(admin.name).toBe('Admin');
+    expect(admin.folders[0].name).toBe('Users');
+    expect(admin.folders[0].requests.map((r: { name: string }) => r.name)).toEqual([
+      'List',
+    ]);
+  });
+
+  it("runs a folder's scripts in the execution chain", async () => {
+    await request(app)
+      .patch(`/api/workspaces/${wsId}/collections/${cid}/folders?folderPath=${folderId}`)
+      .send({
+        scripts: {
+          preRequest: '',
+          postResponse: 'pm.test("folder", () => pm.expect(true).to.be.ok);',
+        },
+      })
+      .expect(204);
+
+    const full = {
+      id: 'r',
+      name: 'r',
+      type: 'http',
+      method: 'GET',
+      url: `${targetBase}/x`,
+      params: [],
+      headers: [],
+      auth: { type: 'none' },
+      body: { mode: 'none', content: '', form: [], formData: [], binaryPath: '' },
+      graphql: { query: '', variables: '' },
+      docs: '',
+      scripts: { preRequest: '', postResponse: '' },
+    };
+    const res = await request(app)
+      .post(`/api/workspaces/${wsId}/execute`)
+      .send({ request: full, collectionId: cid, folderPath: folderId })
+      .expect(200);
+    expect(res.body.script.tests.map((t: { name: string }) => t.name)).toContain(
+      'folder'
+    );
+  });
+
+  it('deletes a folder and its contents', async () => {
+    await request(app)
+      .delete(`/api/workspaces/${wsId}/collections/${cid}/folders?folderPath=${folderId}`)
+      .expect(204);
+    const tree = await request(app).get(`/api/workspaces/${wsId}`).expect(200);
+    const col = tree.body.collections.find((c: { id: string }) => c.id === cid);
+    expect(col.folders).toEqual([]);
+  });
+
+  it('imports a Postman collection preserving folder nesting', async () => {
+    const fixture = path.join(wsDir, 'export.json');
+    fs.writeFileSync(
+      fixture,
+      JSON.stringify({
+        info: {
+          name: 'Imported',
+          schema:
+            'https://schema.getpostman.com/json/collection/v2.1.0/collection.json',
+        },
+        item: [
+          {
+            name: 'Group',
+            item: [
+              { name: 'Ping', request: { method: 'GET', url: { raw: 'http://x/ping' } } },
+            ],
+          },
+          { name: 'Root', request: { method: 'GET', url: { raw: 'http://x/root' } } },
+        ],
+      })
+    );
+    const res = await request(app)
+      .post(`/api/workspaces/${wsId}/import/postman`)
+      .send({ path: fixture })
+      .expect(200);
+    expect(res.body).toMatchObject({
+      kind: 'collection',
+      collections: 1,
+      folders: 1,
+      requests: 2,
+    });
+
+    const tree = await request(app).get(`/api/workspaces/${wsId}`).expect(200);
+    const imported = tree.body.collections.find(
+      (c: { name: string }) => c.name === 'Imported'
+    );
+    expect(imported.folders[0].name).toBe('Group');
+    expect(imported.folders[0].requests[0].name).toBe('Ping');
+    expect(imported.requests.map((r: { name: string }) => r.name)).toEqual(['Root']);
+  });
+});

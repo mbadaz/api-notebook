@@ -56,21 +56,47 @@ describe('convertCollection', () => {
     ],
   };
 
-  const { groups } = convertCollection(collection as never);
-  const folder = groups.find((g) => g.name === 'Folder')!;
-  const root = groups.find((g) => g.name === 'My API')!;
+  const converted = convertCollection(collection as never);
+  const folder = converted.folders.find((f) => f.name === 'Folder')!;
   const req = folder.requests[0];
 
-  it('groups folders into collections and root requests under the collection name', () => {
-    expect(groups.map((g) => g.name).sort()).toEqual(['Folder', 'My API']);
-    expect(root.requests[0].name).toBe('Root req');
+  it('maps the collection to one collection, nesting folders and root requests', () => {
+    expect(converted.name).toBe('My API');
+    expect(converted.folders.map((f) => f.name)).toEqual(['Folder']);
+    expect(converted.requests.map((r) => r.name)).toEqual(['Root req']);
   });
 
-  it('inherits collection scripts into folders and keeps request scripts', () => {
-    expect(folder.scripts.preRequest).toBe('rootPre()'); // inherited from collection root
+  it('keeps collection-, folder- and request-level scripts on their own node', () => {
+    // Scripts are no longer combined down the chain; each node keeps its own.
+    expect(converted.scripts.preRequest).toBe('rootPre()');
+    expect(converted.scripts.postResponse).toBe('');
+    expect(folder.scripts.preRequest).toBe('');
     expect(folder.scripts.postResponse).toBe('folderTest()');
-    expect(root.scripts.preRequest).toBe('rootPre()');
     expect(req.scripts.postResponse).toBe('reqTest()');
+  });
+
+  it('preserves deeper folder nesting', () => {
+    const nested = {
+      info: { name: 'N', schema: SCHEMA },
+      item: [
+        {
+          name: 'Outer',
+          item: [
+            {
+              name: 'Inner',
+              item: [
+                { name: 'Deep req', request: { method: 'GET', url: { raw: 'http://x/' } } },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const root = convertCollection(nested as never);
+    const inner = root.folders[0].folders[0];
+    expect(root.folders[0].name).toBe('Outer');
+    expect(inner.name).toBe('Inner');
+    expect(inner.requests[0].name).toBe('Deep req');
   });
 
   it('maps method, URL (query split out), headers, auth, body and docs', () => {
@@ -131,7 +157,7 @@ describe('convertCollection', () => {
         },
       ],
     };
-    const reqs = convertCollection(bodies as never).groups[0].requests;
+    const reqs = convertCollection(bodies as never).requests;
     const byName = Object.fromEntries(reqs.map((r) => [r.name, r]));
     expect(byName.form.body).toMatchObject({
       mode: 'form',

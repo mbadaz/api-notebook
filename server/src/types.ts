@@ -73,11 +73,22 @@ export interface ApiRequest {
   scripts: Scripts;
 }
 
+export interface Folder {
+  id: string;
+  name: string;
+  description: string;
+  scripts: Scripts;
+  folders: Folder[];
+  requests: ApiRequest[];
+}
+
 export interface Collection {
   id: string;
   name: string;
   description: string;
   scripts: Scripts;
+  folders: Folder[];
+  /** Requests sitting directly at the collection root (outside any folder). */
   requests: ApiRequest[];
 }
 

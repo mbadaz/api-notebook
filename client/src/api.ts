@@ -214,6 +214,11 @@ export const api = {
       json({ request, collectionId, folderPath: folderPath.join('/') })
     ),
 
+  getResponses: (id: string, cid: string, folderPath: string[], rid: string) =>
+    http<ExecutionResult[]>(
+      `/api/workspaces/${id}/collections/${cid}/requests/${rid}/responses${fpQuery(folderPath)}`
+    ),
+
   listCookies: (id: string) =>
     http<StoredCookie[]>(`/api/workspaces/${id}/cookies`),
 

@@ -71,7 +71,8 @@ export function RequestEditor({
   const [saved, setSaved] = useState(request);
   const [draft, setDraft] = useState(request);
   const [tab, setTab] = useState<Tab>('params');
-  const [response, setResponse] = useState<ExecutionResult | null>(null);
+  const [history, setHistory] = useState<ExecutionResult[]>([]);
+  const [viewIndex, setViewIndex] = useState(0);
   const [execError, setExecError] = useState<string | null>(null);
   const [executing, setExecuting] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -83,6 +84,26 @@ export function RequestEditor({
   const dirty =
     JSON.stringify(canonical(draft)) !== JSON.stringify(canonical(saved));
   const isGraphql = draft.type === 'graphql';
+  const response = history[viewIndex] ?? null;
+  const fpKey = folderPath.join('/');
+
+  // Load this request's persisted recent responses when it opens.
+  useEffect(() => {
+    let active = true;
+    api
+      .getResponses(workspaceId, collectionId, folderPath, request.id)
+      .then((h) => {
+        if (active) {
+          setHistory(h);
+          setViewIndex(0);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspaceId, collectionId, fpKey, request.id]);
 
   useEffect(() => {
     onDirtyChange(dirty);
@@ -121,12 +142,15 @@ export function RequestEditor({
     setExecError(null);
     try {
       const result = await api.execute(workspaceId, draft, collectionId, folderPath);
-      setResponse(result);
+      // Mirror the server's persisted history: newest first, capped at 3.
+      setHistory((h) =>
+        [{ ...result, savedAt: new Date().toISOString() }, ...h].slice(0, 3)
+      );
+      setViewIndex(0);
       // Scripts may have persisted environment variables; refresh so the
       // sidebar, variable highlights and env editor reflect the new values.
       if (result.script?.variablesSet.length) onVariablesChanged();
     } catch (err) {
-      setResponse(null);
       setExecError(err instanceof Error ? err.message : String(err));
     } finally {
       setExecuting(false);
@@ -483,6 +507,12 @@ export function RequestEditor({
         response={response}
         error={execError}
         executing={executing}
+        history={history}
+        activeIndex={viewIndex}
+        onSelectHistory={(i) => {
+          setViewIndex(i);
+          setExecError(null);
+        }}
       />
     </div>
   );

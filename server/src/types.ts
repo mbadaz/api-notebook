@@ -138,4 +138,6 @@ export interface ExecutionResult {
   resolvedUrl: string;
   /** Present when pre-request or post-response scripts ran. */
   script?: ScriptOutcome;
+  /** ISO timestamp set when the response is saved to the request's history. */
+  savedAt?: string;
 }

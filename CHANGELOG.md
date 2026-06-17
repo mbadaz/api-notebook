@@ -22,6 +22,10 @@ See [RELEASING.md](RELEASING.md) for the release process.
   *Import folder…* — the latter recursively imports every Postman
   collection/environment export found in a chosen folder (skipping anything
   that isn't a recognised export).
+- **Saved responses**: each request now keeps its last 3 responses, so reopening
+  a request shows its recent results (with a switcher to step back through them).
+  Responses are a local cache stored beside each request and are gitignored
+  (they can contain tokens/PII), like secret environment values.
 - Documentation now has **edit** and **preview** modes (request docs and
   collection descriptions). Existing docs open in a read-only rendered preview
   with an **Edit** button; empty docs open straight in the editor; a **Done**

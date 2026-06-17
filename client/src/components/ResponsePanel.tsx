@@ -7,6 +7,19 @@ interface Props {
   response: ExecutionResult | null;
   error: string | null;
   executing: boolean;
+  /** Recent responses (newest first); shows a switcher when more than one. */
+  history?: ExecutionResult[];
+  activeIndex?: number;
+  onSelectHistory?: (index: number) => void;
+}
+
+function historyLabel(entry: ExecutionResult, index: number): string {
+  if (index === 0) return 'Latest';
+  if (!entry.savedAt) return `#${index + 1}`;
+  return new Date(entry.savedAt).toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 }
 
 // Beyond this, formatting/highlighting large bodies would jank the UI.
@@ -25,7 +38,14 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
-export function ResponsePanel({ response, error, executing }: Props) {
+export function ResponsePanel({
+  response,
+  error,
+  executing,
+  history,
+  activeIndex = 0,
+  onSelectHistory,
+}: Props) {
   const [tab, setTab] = useState<'body' | 'headers' | 'script'>('body');
   const [view, setView] = useState<'pretty' | 'raw'>('pretty');
 
@@ -109,6 +129,20 @@ export function ResponsePanel({ response, error, executing }: Props) {
     <div className="response-panel">
       <div className="response-header">
         <span className="panel-title">Response</span>
+        {!executing && history && history.length > 1 && (
+          <div className="tab-group response-history" title="Recent responses">
+            {history.map((entry, i) => (
+              <button
+                key={i}
+                className={i === activeIndex ? 'tab active' : 'tab'}
+                title={entry.savedAt ? new Date(entry.savedAt).toLocaleString() : ''}
+                onClick={() => onSelectHistory?.(i)}
+              >
+                {historyLabel(entry, i)}
+              </button>
+            ))}
+          </div>
+        )}
         {executing && <span className="muted">Sending…</span>}
         {response && !executing && (
           <>

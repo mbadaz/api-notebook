@@ -6,6 +6,7 @@ import type {
   ApiRequest,
   Collection,
   Environment,
+  ExecutionResult,
   Folder,
   RequestType,
   Scripts,
@@ -21,8 +22,14 @@ const COLLECTION_FILE = 'collection.json';
  * subdirectory. We still read that layout, but never write to it.
  */
 const LEGACY_REQUESTS_DIR = 'requests';
+/** Suffix for the persisted response-history file kept beside each request. */
+const RESPONSE_SUFFIX = '.response.json';
+/** How many recent responses to keep per request (newest first). */
+const RESPONSE_HISTORY = 3;
 const emptyScripts = (): Scripts => ({ preRequest: '', postResponse: '' });
 const LOCAL_ENV_IGNORE = 'environments/*.local.json';
+/** Saved responses are a local cache (may hold tokens/PII) — never committed. */
+const RESPONSE_IGNORE = '*.response.json';
 
 export class HttpError extends Error {
   constructor(
@@ -121,7 +128,12 @@ function listDirs(dir: string): string[] {
 /** Names (without .json) of request files directly inside a node directory. */
 function requestIdsIn(dir: string): string[] {
   return listJsonFiles(dir)
-    .filter((f) => f !== COLLECTION_FILE && f !== FOLDER_FILE)
+    .filter(
+      (f) =>
+        f !== COLLECTION_FILE &&
+        f !== FOLDER_FILE &&
+        !f.endsWith(RESPONSE_SUFFIX)
+    )
     .map((f) => f.replace(/\.json$/, ''));
 }
 
@@ -178,6 +190,9 @@ export function createWorkspace(name: string, dirPath: string): WorkspaceMeta {
         '# Secret environment values — the shared environment files only',
         '# declare secret variable names; the values live here and stay local.',
         LOCAL_ENV_IGNORE,
+        '',
+        '# Saved responses are a local cache (may hold tokens/PII).',
+        RESPONSE_IGNORE,
         '',
         '# OS cruft',
         '.DS_Store',
@@ -548,6 +563,50 @@ export function deleteRequest(
   const dir = requestFileDir(ws, collectionId, folderPath, id);
   fs.rmSync(path.join(dir, `${id}.json`), { force: true });
   fs.rmSync(path.join(dir, `${id}.md`), { force: true });
+  fs.rmSync(path.join(dir, `${id}${RESPONSE_SUFFIX}`), { force: true });
+}
+
+// ----- persisted response history -----
+
+/**
+ * Saves a response into the request's history (newest first, capped at
+ * RESPONSE_HISTORY). The history is a local cache beside the request file and
+ * is never committed (see RESPONSE_IGNORE). No-ops if the request file is gone.
+ */
+export function saveResponse(
+  ws: WorkspaceMeta,
+  collectionId: string,
+  folderPath: string[],
+  id: string,
+  result: ExecutionResult
+): void {
+  const dir = requestFileDir(ws, collectionId, folderPath, id);
+  if (!fs.existsSync(path.join(dir, `${id}.json`))) return;
+  const file = path.join(dir, `${id}${RESPONSE_SUFFIX}`);
+  const entry: ExecutionResult = { ...result, savedAt: new Date().toISOString() };
+  const history = [entry, ...readResponseHistory(file)].slice(0, RESPONSE_HISTORY);
+  writeJson(file, history);
+  ensureIgnored(ws, RESPONSE_IGNORE, 'Saved responses stay local');
+}
+
+function readResponseHistory(file: string): ExecutionResult[] {
+  if (!fs.existsSync(file)) return [];
+  try {
+    const data = readJson<unknown>(file);
+    return Array.isArray(data) ? (data as ExecutionResult[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function getResponses(
+  ws: WorkspaceMeta,
+  collectionId: string,
+  folderPath: string[],
+  id: string
+): ExecutionResult[] {
+  const dir = requestFileDir(ws, collectionId, folderPath, id);
+  return readResponseHistory(path.join(dir, `${id}${RESPONSE_SUFFIX}`));
 }
 
 // ----- move (reparent) -----
@@ -602,6 +661,10 @@ export function moveRequest(
   const srcMd = path.join(srcDir, `${from.requestId}.md`);
   if (fs.existsSync(srcMd)) {
     fs.renameSync(srcMd, path.join(destDir, `${newId}.md`));
+  }
+  const srcResp = path.join(srcDir, `${from.requestId}${RESPONSE_SUFFIX}`);
+  if (fs.existsSync(srcResp)) {
+    fs.renameSync(srcResp, path.join(destDir, `${newId}${RESPONSE_SUFFIX}`));
   }
   return { ...to, requestId: newId };
 }
@@ -663,21 +726,18 @@ export function getEnvironment(
 }
 
 /**
- * Make sure the workspace's .gitignore excludes <env>.local.json files,
- * so secret values can never be committed by accident. Appends the rule
- * to workspaces created before this feature existed.
+ * Make sure the workspace's .gitignore contains a pattern, appending it (with a
+ * comment) when missing. Used to keep local-only artifacts — secret env values
+ * and saved responses — out of Git even in workspaces created before the
+ * feature existed.
  */
-function ensureLocalEnvIgnored(ws: WorkspaceMeta): void {
+function ensureIgnored(ws: WorkspaceMeta, pattern: string, comment: string): void {
   const file = path.join(ws.path, '.gitignore');
   const existing = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
   const lines = existing.split('\n').map((l) => l.trim());
-  if (lines.includes(LOCAL_ENV_IGNORE) || lines.includes(`/${LOCAL_ENV_IGNORE}`)) {
-    return;
-  }
-  const block = `# Secret environment values stay local\n${LOCAL_ENV_IGNORE}\n`;
-  const content = existing
-    ? existing.replace(/\n*$/, '\n\n') + block
-    : block;
+  if (lines.includes(pattern) || lines.includes(`/${pattern}`)) return;
+  const block = `# ${comment}\n${pattern}\n`;
+  const content = existing ? existing.replace(/\n*$/, '\n\n') + block : block;
   fs.writeFileSync(file, content);
 }
 
@@ -701,7 +761,7 @@ export function updateEnvironment(
     writeJson(localEnvFile(ws, id), {
       values: Object.fromEntries(secrets.map((v) => [v.key, v.value])),
     });
-    ensureLocalEnvIgnored(ws);
+    ensureIgnored(ws, LOCAL_ENV_IGNORE, 'Secret environment values stay local');
   } else {
     fs.rmSync(localEnvFile(ws, id), { force: true });
   }

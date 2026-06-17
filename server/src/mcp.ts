@@ -471,6 +471,7 @@ function buildServer(): McpServer {
           variables: applyEnvChanges(env, outcome.envVars, outcome.changedEnvKeys),
         });
       }
+      wsfs.saveResponse(ws, collectionId, path, requestId, outcome.result);
       const r = outcome.result;
       const truncated = r.body.length > MAX_BODY_CHARS;
       return {

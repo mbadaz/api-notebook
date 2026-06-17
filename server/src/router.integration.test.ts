@@ -128,6 +128,16 @@ describe('workspace/collection/request endpoints', () => {
     expect(res.body.status).toBe(200);
     expect(res.body.script.tests[0]).toMatchObject({ name: 'ok', passed: true });
   });
+
+  it('persists the response and serves it back from the history endpoint', async () => {
+    const before = await request(app)
+      .get(`/api/workspaces/${WID}/collections/${CID}/requests/${RID}/responses`)
+      .expect(200);
+    expect(Array.isArray(before.body)).toBe(true);
+    expect(before.body.length).toBeGreaterThan(0);
+    expect(before.body[0]).toMatchObject({ status: 200 });
+    expect(before.body[0].savedAt).toBeTruthy();
+  });
 });
 
 describe('folder endpoints', () => {

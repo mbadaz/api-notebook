@@ -3,7 +3,18 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import * as wsfs from './workspaceFs.js';
-import type { WorkspaceMeta } from './types.js';
+import type { ExecutionResult, WorkspaceMeta } from './types.js';
+
+const mkResult = (status: number): ExecutionResult => ({
+  status,
+  statusText: 'OK',
+  headers: {},
+  body: `{"n":${status}}`,
+  bodyEncoding: 'text',
+  timeMs: 1,
+  sizeBytes: 8,
+  resolvedUrl: 'http://x/',
+});
 
 let dir: string;
 let ws: WorkspaceMeta;
@@ -211,6 +222,59 @@ describe('move (reparent)', () => {
         { collectionId: col.id, folderPath: [parent.id, child.id] }
       )
     ).toThrow(/itself or its own subfolder/);
+  });
+});
+
+describe('response history', () => {
+  it('keeps only the last 3 responses, newest first, with a savedAt', () => {
+    const col = wsfs.createCollection(ws, 'R');
+    const req = wsfs.createRequest(ws, col.id, [], 'Ping', 'http');
+    for (const code of [200, 201, 202, 500]) {
+      wsfs.saveResponse(ws, col.id, [], req.id, mkResult(code));
+    }
+    const history = wsfs.getResponses(ws, col.id, [], req.id);
+    expect(history.map((r) => r.status)).toEqual([500, 202, 201]);
+    expect(history[0].savedAt).toBeTruthy();
+  });
+
+  it('does not surface the response file as a request, and gitignores it', () => {
+    const col = wsfs.createCollection(ws, 'R2');
+    const req = wsfs.createRequest(ws, col.id, [], 'Once', 'http');
+    wsfs.saveResponse(ws, col.id, [], req.id, mkResult(200));
+
+    const collection = wsfs
+      .readTree(ws, null)
+      .collections.find((c) => c.id === col.id)!;
+    expect(collection.requests.map((r) => r.id)).toEqual([req.id]);
+
+    const gitignore = fs.readFileSync(path.join(dir, '.gitignore'), 'utf8');
+    expect(gitignore).toContain('*.response.json');
+  });
+
+  it('drops the history when the request is deleted and moves it on reparent', () => {
+    const col = wsfs.createCollection(ws, 'R3');
+    const folder = wsfs.createFolder(ws, col.id, [], 'F');
+    const req = wsfs.createRequest(ws, col.id, [], 'Move', 'http');
+    wsfs.saveResponse(ws, col.id, [], req.id, mkResult(200));
+
+    const moved = wsfs.moveRequest(
+      ws,
+      { collectionId: col.id, folderPath: [], requestId: req.id },
+      { collectionId: col.id, folderPath: [folder.id] }
+    );
+    expect(wsfs.getResponses(ws, col.id, [], req.id)).toEqual([]);
+    expect(
+      wsfs.getResponses(ws, col.id, [folder.id], moved.requestId).map((r) => r.status)
+    ).toEqual([200]);
+
+    wsfs.deleteRequest(ws, col.id, [folder.id], moved.requestId);
+    expect(wsfs.getResponses(ws, col.id, [folder.id], moved.requestId)).toEqual([]);
+  });
+
+  it('no-ops saving a response for a request that does not exist', () => {
+    const col = wsfs.createCollection(ws, 'R4');
+    wsfs.saveResponse(ws, col.id, [], 'ghost', mkResult(200));
+    expect(wsfs.getResponses(ws, col.id, [], 'ghost')).toEqual([]);
   });
 });
 

@@ -343,7 +343,27 @@ router.post(
       });
     }
 
+    // Keep the request's recent-response history (no-ops for unsaved requests).
+    if (collectionId && typeof request.id === 'string') {
+      wsfs.saveResponse(ws, collectionId, folderPath, request.id, outcome.result);
+    }
+
     res.json(outcome.result);
+  })
+);
+
+router.get(
+  '/workspaces/:id/collections/:cid/requests/:rid/responses',
+  wrap((req, res) => {
+    const ws = getWorkspace(req.params.id);
+    res.json(
+      wsfs.getResponses(
+        ws,
+        req.params.cid,
+        parseFolderPath(req.query.folderPath),
+        req.params.rid
+      )
+    );
   })
 );
 

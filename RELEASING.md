@@ -16,8 +16,9 @@ Release. There is one version for the whole app — the root and both workspaces
 ## Cutting a release
 
 1. **Make sure `main` is green.** CI (`.github/workflows/ci.yml`) runs typecheck
-   and build on every push/PR. There is no automated test suite yet — verify
-   manually if the change warrants it.
+   and build on every push/PR. Also run the Vitest suite locally (`npm test`);
+   the React UI has limited automated coverage, so verify manually if the change
+   warrants it.
 
 2. **Update the changelog.** In `CHANGELOG.md`, move the entries under
    `## [Unreleased]` into a new `## [X.Y.Z] - YYYY-MM-DD` section, and update the

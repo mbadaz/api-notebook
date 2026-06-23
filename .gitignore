@@ -23,6 +23,10 @@ coverage/
 !.vscode/extensions.json
 /.claude
 
+# Local-only agent orientation docs
+/AGENTS.md
+/CLAUDE.md
+
 # OS cruft
 .DS_Store
 Thumbs.db

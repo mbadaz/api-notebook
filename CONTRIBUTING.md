@@ -32,6 +32,7 @@ Other useful scripts (run from the repo root):
 ```sh
 npm run typecheck  # tsc --noEmit across all workspaces
 npm run build      # build server + client
+npm test           # Vitest across all workspaces (server + client)
 npm start          # run the production build (serves the built UI + API on :3001)
 ```
 
@@ -65,10 +66,12 @@ change it.
 1. Create a branch off `main` (e.g. `git checkout -b fix-cookie-domain`).
 2. Make your change, matching the style of the surrounding code. There's no
    separate linter/formatter — the source of truth is the TypeScript compiler.
-3. Keep it green: `npm run typecheck && npm run build` must both pass.
-4. There is no automated test suite yet, so **verify manually** by running the
-   app (`npm run dev`) and exercising the affected paths. Describe what you did
-   in the PR.
+3. Keep it green: `npm run typecheck`, `npm run build`, and `npm test` must all
+   pass.
+4. The Vitest suite covers the server and core client logic, but the React UI
+   has limited coverage — **also verify manually** by running the app
+   (`npm run dev`) and exercising the affected paths. Describe what you did in
+   the PR.
 5. If your change is user-facing, add a line under `## [Unreleased]` in
    [`CHANGELOG.md`](CHANGELOG.md).
 6. Update docs (README and others) when behavior or usage changes.

@@ -11,6 +11,12 @@ plain folder of JSON and Markdown files you can commit, diff, and share.
   read at send time; Content-Type is guessed from the extension.
 - **Binary-safe responses** with a Download button; non-text responses
   (images, PDFs, archives) survive intact.
+- **Streaming protocols** — WebSocket, Socket.IO, and MCP (Streamable HTTP)
+  request types. Connections are made through the local server (so
+  `{{variables}}`, headers, auth, and the cookie jar apply), with a live
+  message log and reusable saved messages/emits. MCP requests browse a
+  server's tools and call them via a form generated from each tool's JSON
+  Schema.
 - **cURL import/export**: paste a cURL command into a collection to create
   a request, or copy any request as a runnable cURL command with variables
   resolved.
@@ -123,17 +129,18 @@ workspace shows unfilled secrets with a "missing" warning, and their
 
 Export a collection or environment from Postman (Collection format
 **v2.1.0**), then in API Notebook click the **⤓** button in the sidebar's
-**Collections** heading and pick the `.json` file. The file type is detected
-automatically, and everything imports into the **current workspace**, so open
-or create the workspace you want first. Run the import once per file to bring
-in a collection and each of its environments.
+**Collections** heading. Choose **Import file…** to pick a single `.json`
+export, or **Import folder…** to recursively import every collection/environment
+export found in a folder at once. The file type is detected automatically, and
+everything imports into the **current workspace**, so open or create the
+workspace you want first.
 
 What gets mapped:
 
-- **Folders → collections.** Nested folders are flattened into collections
-  named by their path (`Parent / Child`), since collections are a single
-  level here. Requests sitting at the collection root go into a collection
-  named after the Postman collection.
+- **Folders → folders.** Postman folders import as nestable folders inside the
+  collection, preserving the original hierarchy. Requests sitting at the
+  collection root stay at the root of a collection named after the Postman
+  collection.
 - **Requests** keep their method, URL (the query string is split into the
   Params editor), headers, and auth (Bearer, Basic, API key). Bodies map
   across raw JSON/text, `x-www-form-urlencoded`, multipart form-data
@@ -141,10 +148,10 @@ What gets mapped:
 - **Descriptions → Markdown docs** on the request.
 - **Scripts**: request pre-request/test scripts import into the request's
   **Pre-request** / **Tests** tabs. Collection- and folder-level scripts import
-  too — because folders are flattened, each collection inherits the combined
-  scripts of its Postman ancestor chain, so they still run around every request
-  (see [Scripting](#scripting-pre-request--tests)). Scripts may use Postman APIs
-  this app doesn't implement; they import as-is and surface any errors at run time.
+  too and run in the execution chain (collection → folder(s) → request), so they
+  still run around every request (see [Scripting](#scripting-pre-request--tests)).
+  Scripts may use Postman APIs this app doesn't implement; they import as-is and
+  surface any errors at run time.
 - **Environments**: each `values` entry becomes a variable. Variables Postman
   marks as `secret` are imported as 🔒 secret — the name goes to the shared
   environment file and the value to the gitignored `<env>.local.json`.

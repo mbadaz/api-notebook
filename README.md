@@ -248,12 +248,13 @@ claude mcp add --transport http api-notebook http://localhost:3001/mcp
 
 Some things you can ask an agent to do once it's connected:
 
-- **Build out an endpoint you're implementing.** *"In the `payments-api`
-  workspace, add a `POST /v1/refunds` request to the Refunds collection with
-  bearer auth and a sample JSON body, run it against `{{base_url}}`, and adjust
-  the request until it returns 201."* The agent creates the request, executes
-  it through the same proxy the UI uses (variables, scripts, cookie jar), and
-  iterates on the real response.
+- **Implement a documented API in the app you're working on.** *"Implement
+  the `POST /v1/refunds` endpoint described in the Refunds collection of my
+  `payments-api` workspace, then run that request against my dev server until
+  it passes."* The agent reads the request's URL, params, auth, body, and
+  Markdown docs as the spec, writes the endpoint in your codebase, and
+  verifies it by executing the saved request — with variables, scripts, and
+  the cookie jar applied — iterating until the tests pass.
 - **Document a finished API.** After you've built an API, point an agent at
   the source or OpenAPI spec and ask it to *"create a collection in my
   API Notebook workspace with one request per endpoint, each with Markdown
@@ -265,6 +266,10 @@ Some things you can ask an agent to do once it's connected:
 - **Migrate and tidy.** *"Import `~/exports/legacy.postman_collection.json`
   into this workspace, then rename the requests to match our conventions and
   move the auth token into a 🔒 secret variable."*
+
+In short, the MCP server lets API Notebook work in both directions: as the
+**spec** an agent implements code from, and as the **target** where an agent
+documents an API from its source code.
 
 Tools are **multi-workspace** — each takes a `workspaceId` (call
 `list_workspaces` first to discover them; create new workspaces from the app UI,

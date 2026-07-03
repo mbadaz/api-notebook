@@ -1,64 +1,22 @@
+<div align="center">
+
 # API Notebook
 
-A local-first, Git-friendly API client that you can run in your browser — like Postman, but every workspace is a
-plain folder of JSON and Markdown files you can commit, diff, and share.
+**A local-first, Git-friendly API client** — like Postman, but every workspace
+is a plain folder of JSON and Markdown files you can commit, diff, and share.
+
+[![CI](https://github.com/mbadaz/api-notebook/actions/workflows/ci.yml/badge.svg)](https://github.com/mbadaz/api-notebook/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/mbadaz/api-notebook)](https://github.com/mbadaz/api-notebook/releases)
+[![Node ≥ 22](https://img.shields.io/badge/node-%E2%89%A5%2022-339933?logo=node.js&logoColor=white)](https://nodejs.org)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
 ![API Notebook — a request with its variable-aware URL and a syntax-highlighted JSON response](docs/screenshot.png)
 
-- **HTTP & GraphQL requests** with params, headers, body modes (JSON, text,
-  form-urlencoded, multipart form-data with file fields, binary file) and
-  GraphQL query/variables editors. File bodies are referenced by path and
-  read at send time; Content-Type is guessed from the extension.
-- **Binary-safe responses** with a Download button; non-text responses
-  (images, PDFs, archives) survive intact.
-- **Streaming protocols** — WebSocket, Socket.IO, and MCP (Streamable HTTP)
-  request types. Connections are made through the local server (so
-  `{{variables}}`, headers, auth, and the cookie jar apply), with a live
-  message log and reusable saved messages/emits. MCP requests browse a
-  server's tools and call them via a form generated from each tool's JSON
-  Schema.
-- **cURL import/export**: paste a cURL command into a collection to create
-  a request, or copy any request as a runnable cURL command with variables
-  resolved.
-- **Postman import**: bring in a Postman collection or environment export
-  (Collection v2.1.0) — folders become collections, requests keep their
-  URLs, params, headers, auth and bodies, descriptions become Markdown docs,
-  and environment variables import (Postman secrets land in the gitignored
-  `.local.json`).
-- **Scripts**: Postman-compatible pre-request and post-response (test)
-  scripts with a `pm.*` API — set environment variables from a response,
-  tweak the outgoing request, and write `pm.test`/`pm.expect` assertions.
-  Works at the request, folder, and collection level — collection and folder
-  scripts run around every request beneath them.
-- **Request management**: hover menu on sidebar items with Rename, Copy,
-  Paste (across collections), Duplicate, and Delete; unsaved changes
-  highlight the Save button and prompt before navigating away.
-- **Cookies**: an automatic per-workspace cookie jar captures `Set-Cookie`
-  from responses and attaches matching cookies to later requests (honoring
-  domain/path/expiry/secure); a manager lets you view and clear them, and
-  scripts can read them via `pm.cookies`.
-- **Auth helpers**: Bearer token, Basic auth, API key (header or query).
-- **Environments** (workspace-level) with `{{variable}}` interpolation in
-  URLs, params, headers, auth fields, and bodies. The active environment is
-  stored outside the workspace so it never pollutes your repo.
-- **Secret variables**: mark a variable 🔒 and its value is written to a
-  gitignored `<env>.local.json` instead of the shared environment file —
-  the shared file only declares the name, so teammates see exactly which
-  secrets they need to fill in locally.
-- **Markdown docs** on every request (stored as a sibling `.md` file, so it
-  renders on GitHub) and on every collection.
-- **Workspaces** are folders you choose anywhere on disk via the native
-  system folder picker (or by typing a path) — collaborate by making a
-  workspace a Git repo and pushing it to GitHub. On Linux the picker uses
-  `zenity` or `kdialog` if installed.
-- **MCP server**: AI agents can connect over MCP to query, build, run, and
-  manage workspaces — collections, requests, environments, execution, and
-  Postman import — via a Streamable-HTTP endpoint on the same server.
-- Requests are executed by the local Node server (no CORS problems), which
-  returns status, headers, body, timing, and size.
+</div>
 
 ## Contents
 
+- [Features](#features)
 - [Getting started](#getting-started)
 - [Workspace layout on disk](#workspace-layout-on-disk)
 - [Collaborating via Git](#collaborating-via-git)
@@ -71,6 +29,77 @@ plain folder of JSON and Markdown files you can commit, diff, and share.
 - [Contributing](#contributing)
 - [Releases](#releases)
 - [License](#license)
+
+## Features
+
+### Requests & protocols
+
+- **HTTP & GraphQL requests** with params, headers, body modes (JSON, text,
+  form-urlencoded, multipart form-data with file fields, binary file) and
+  GraphQL query/variables editors. File bodies are referenced by path and
+  read at send time; Content-Type is guessed from the extension.
+- **Streaming protocols** — WebSocket, Socket.IO, and MCP (Streamable HTTP)
+  request types. Connections are made through the local server (so
+  `{{variables}}`, headers, auth, and the cookie jar apply), with a live
+  message log and reusable saved messages/emits. MCP requests browse a
+  server's tools and call them via a form generated from each tool's JSON
+  Schema.
+- **Binary-safe responses** with a Download button; non-text responses
+  (images, PDFs, archives) survive intact.
+- **Auth helpers**: Bearer token, Basic auth, API key (header or query).
+- **No CORS problems** — requests are executed by the local Node server,
+  which returns status, headers, body, timing, and size.
+
+### Automation
+
+- **Scripts**: Postman-compatible pre-request and post-response (test)
+  scripts with a `pm.*` API — set environment variables from a response,
+  tweak the outgoing request, and write `pm.test`/`pm.expect` assertions.
+  Works at the request, folder, and collection level — collection and folder
+  scripts run around every request beneath them.
+- **Cookies**: an automatic per-workspace cookie jar captures `Set-Cookie`
+  from responses and attaches matching cookies to later requests (honoring
+  domain/path/expiry/secure); a manager lets you view and clear them, and
+  scripts can read them via `pm.cookies`.
+
+### Environments & secrets
+
+- **Environments** (workspace-level) with `{{variable}}` interpolation in
+  URLs, params, headers, auth fields, and bodies. The active environment is
+  stored outside the workspace so it never pollutes your repo.
+- **Secret variables**: mark a variable 🔒 and its value is written to a
+  gitignored `<env>.local.json` instead of the shared environment file —
+  the shared file only declares the name, so teammates see exactly which
+  secrets they need to fill in locally.
+
+### Local-first & Git-friendly
+
+- **Workspaces** are folders you choose anywhere on disk via the native
+  system folder picker (or by typing a path) — collaborate by making a
+  workspace a Git repo and pushing it to GitHub. On Linux the picker uses
+  `zenity` or `kdialog` if installed.
+- **Markdown docs** on every request (stored as a sibling `.md` file, so it
+  renders on GitHub) and on every collection.
+- **Request management**: hover menu on sidebar items with Rename, Copy,
+  Paste (across collections), Duplicate, and Delete; unsaved changes
+  highlight the Save button and prompt before navigating away.
+
+### Import & export
+
+- **Postman import**: bring in a Postman collection or environment export
+  (Collection v2.1.0) — folders become collections, requests keep their
+  URLs, params, headers, auth and bodies, descriptions become Markdown docs,
+  and environment variables import (Postman secrets land in the gitignored
+  `.local.json`).
+- **cURL import/export**: paste a cURL command into a collection to create
+  a request, or copy any request as a runnable cURL command with variables
+  resolved.
+
+### For AI agents
+
+- **MCP server**: AI agents can connect over MCP to query, build, run, and
+  manage workspaces — collections, requests, environments, execution, and
+  Postman import — via a Streamable-HTTP endpoint on the same server.
 
 ## Getting started
 
@@ -105,9 +134,10 @@ my-workspace/
             └── get-user.md     # the request's Markdown docs
 ```
 
-App-local state lives in `~/.apinotebook/` (the list of registered workspaces
-and each workspace's active environment) — nothing machine-specific is ever
-written into the workspace folder.
+> [!NOTE]
+> App-local state lives in `~/.apinotebook/` (the list of registered
+> workspaces and each workspace's active environment) — nothing
+> machine-specific is ever written into the workspace folder.
 
 ## Collaborating via Git
 
@@ -212,11 +242,12 @@ A pragmatic subset of Postman's:
 - `console.log/info/warn/error` — captured and shown in the response's **Tests**
   tab, alongside test results and the variables a run changed.
 
-Scripts run on the local server in a constrained `node:vm` sandbox (no
-`require`, `process`, `fetch` or timers) with a 2-second timeout. This keeps
-your own scripts contained on your own machine; it is **not** a hardened
-boundary, so review scripts in collections you import from elsewhere before
-running them.
+> [!WARNING]
+> Scripts run on the local server in a constrained `node:vm` sandbox (no
+> `require`, `process`, `fetch` or timers) with a 2-second timeout. This keeps
+> your own scripts contained on your own machine; it is **not** a hardened
+> boundary, so review scripts in collections you import from elsewhere before
+> running them.
 
 ## Cookies
 
@@ -246,6 +277,8 @@ it to your favourite agent. For example:
 claude mcp add --transport http api-notebook http://localhost:3001/mcp
 ```
 
+### Example uses
+
 Some things you can ask an agent to do once it's connected:
 
 - **Implement a documented API in the app you're working on.** *"Implement
@@ -267,9 +300,12 @@ Some things you can ask an agent to do once it's connected:
   into this workspace, then rename the requests to match our conventions and
   move the auth token into a 🔒 secret variable."*
 
-In short, the MCP server lets API Notebook work in both directions: as the
-**spec** an agent implements code from, and as the **target** where an agent
-documents an API from its source code.
+> [!TIP]
+> In short, the MCP server lets API Notebook work in both directions: as the
+> **spec** an agent implements code from, and as the **target** where an agent
+> documents an API from its source code.
+
+### Tools
 
 Tools are **multi-workspace** — each takes a `workspaceId` (call
 `list_workspaces` first to discover them; create new workspaces from the app UI,
@@ -290,15 +326,18 @@ since that needs a folder picker). The tool set covers full management:
   returns a summary of exactly what would be deleted and does nothing; the agent
   must surface that and re-call with `confirm: true` once you approve.
 
-The endpoint is unauthenticated, matching the local REST API — it's meant for
-`localhost` use only. (cURL-string import isn't an MCP tool; agents create
-requests directly via `create_request` / `update_request`.)
+> [!NOTE]
+> The endpoint is unauthenticated, matching the local REST API — it's meant
+> for `localhost` use only. (cURL-string import isn't an MCP tool; agents
+> create requests directly via `create_request` / `update_request`.)
 
 ## Keyboard shortcuts
 
-- `Cmd/Ctrl+Enter` — send the current request
-- `Cmd/Ctrl+S` — save the current request
-- `Enter` in the URL bar — send
+| Shortcut | Action |
+|---|---|
+| `Cmd/Ctrl` + `Enter` | Send the current request |
+| `Cmd/Ctrl` + `S` | Save the current request |
+| `Enter` in the URL bar | Send |
 
 ## Stack
 

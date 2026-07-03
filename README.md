@@ -28,7 +28,8 @@ plain folder of JSON and Markdown files you can commit, diff, and share.
 - **Scripts**: Postman-compatible pre-request and post-response (test)
   scripts with a `pm.*` API — set environment variables from a response,
   tweak the outgoing request, and write `pm.test`/`pm.expect` assertions.
-  Works at the request and collection level.
+  Works at the request, folder, and collection level — collection and folder
+  scripts run around every request beneath them.
 - **Request management**: hover menu on sidebar items with Rename, Copy,
   Paste (across collections), Duplicate, and Delete; unsaved changes
   highlight the Save button and prompt before navigating away.
@@ -160,9 +161,8 @@ What gets mapped:
 
 Automate requests with Postman-compatible JavaScript. Each request has a
 **Pre-request** tab (runs before sending) and a **Tests** tab (runs after the
-response arrives); collections have the same two, which run around every
-request in the collection. The most common use is setting environment
-variables from a response:
+response arrives). The most common use is setting environment variables from
+a response:
 
 ```js
 // Tests (post-response)
@@ -171,7 +171,30 @@ pm.environment.set("bearer_token", data.token);   // later requests use {{bearer
 pm.test("login ok", () => pm.expect(pm.response.code).to.equal(200));
 ```
 
-The `pm` API (a pragmatic subset of Postman's):
+### Collection and folder scripts
+
+Scripts don't only live on requests — **collections and folders have the same
+Pre-request and Tests tabs** (click the collection or folder in the sidebar to
+open its editor). A script set there runs around *every* request underneath
+it, which is the place for shared setup like refreshing an auth token or
+asserting that no response is a 5xx.
+
+When a request runs, the scripts along its path are chained, outermost first:
+
+```
+collection pre-request → folder pre-request(s, outer → inner) → request pre-request
+                                → request is sent →
+collection tests       → folder tests(s, outer → inner)       → request tests
+```
+
+All levels share one run state, so a variable set with `pm.variables.set` in
+a collection pre-request script is visible to the folder and request scripts
+below it. Collection- and folder-level scripts imported from Postman slot into
+this same chain.
+
+### The `pm` API
+
+A pragmatic subset of Postman's:
 
 - `pm.environment.get/set/unset/has/toObject` — **persisted** to the active
   environment. If the variable is 🔒 secret the value goes to the gitignored
@@ -222,6 +245,26 @@ it to your favourite agent. For example:
 ```sh
 claude mcp add --transport http api-notebook http://localhost:3001/mcp
 ```
+
+Some things you can ask an agent to do once it's connected:
+
+- **Build out an endpoint you're implementing.** *"In the `payments-api`
+  workspace, add a `POST /v1/refunds` request to the Refunds collection with
+  bearer auth and a sample JSON body, run it against `{{base_url}}`, and adjust
+  the request until it returns 201."* The agent creates the request, executes
+  it through the same proxy the UI uses (variables, scripts, cookie jar), and
+  iterates on the real response.
+- **Document a finished API.** After you've built an API, point an agent at
+  the source or OpenAPI spec and ask it to *"create a collection in my
+  API Notebook workspace with one request per endpoint, each with Markdown
+  docs and an example body."* Because a workspace is a plain folder, you can
+  review the result as a Git diff and commit it alongside the code.
+- **Smoke-test and debug.** *"Run every request in the smoke-tests collection
+  against the staging environment and summarize any failures"* — the agent
+  gets back status, timing, and `pm.test` outcomes for each run.
+- **Migrate and tidy.** *"Import `~/exports/legacy.postman_collection.json`
+  into this workspace, then rename the requests to match our conventions and
+  move the auth token into a 🔒 secret variable."*
 
 Tools are **multi-workspace** — each takes a `workspaceId` (call
 `list_workspaces` first to discover them; create new workspaces from the app UI,
